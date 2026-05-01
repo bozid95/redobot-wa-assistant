@@ -1,0 +1,149 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: wa_rag_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      APP_DB_NAME: ${APP_DB_NAME}
+      EVOLUTION_DB_NAME: ${EVOLUTION_DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: wa_rag_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: wa_rag_qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  tika:
+    image: apache/tika:3.2.3.0
+    container_name: wa_rag_tika
+    restart: unless-stopped
+
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: wa_rag_evolution_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "7002:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+    environment:
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      SERVER_URL: ${EVOLUTION_SERVER_URL}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${EVOLUTION_DB_NAME}
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/1
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: "false"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: wa_rag_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      tika:
+        condition: service_started
+      evolution-api:
+        condition: service_started
+    ports:
+      - "7001:4000"
+    volumes:
+      - uploads_data:/app/uploads
+      - knowledge_data:/app/knowledge
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      TZ: ${TZ:-Asia/Jakarta}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${APP_DB_NAME}
+      JWT_SECRET: ${JWT_SECRET:-jwt-secret-change-me}
+      COOKIE_SECRET: ${COOKIE_SECRET:-cookie-secret-change-me}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-dashboard-password}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCE_NAME: ${EVOLUTION_INSTANCE_NAME:-wa-rag-bot}
+      EVOLUTION_SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
+      EVOLUTION_WEBHOOK_URL: ${EVOLUTION_WEBHOOK_URL:-http://backend:4000/webhooks/evolution}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      CHAT_MODEL: ${CHAT_MODEL:-gpt-4.1-mini}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.openai.com/v1}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-${LLM_API_KEY}}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-wa_kb}
+      QDRANT_VECTOR_SIZE: ${QDRANT_VECTOR_SIZE:-1536}
+      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.45}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_MAX_CONTEXT_CHUNKS: ${RAG_MAX_CONTEXT_CHUNKS:-3}
+      CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-700}
+      CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-100}
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-id}
+      UPLOAD_DIR: /app/uploads
+      KNOWLEDGE_DIR: /app/knowledge
+      TIKA_URL: http://tika:9998
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend-vue-tailadmin
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:4000}
+    container_name: wa_rag_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "7000:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  evolution_instances:
+  uploads_data:
+  knowledge_data:
