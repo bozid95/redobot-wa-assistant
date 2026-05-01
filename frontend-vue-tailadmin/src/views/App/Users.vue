@@ -2,148 +2,152 @@
   <admin-layout>
     <PageBreadcrumb pageTitle="Users" />
 
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+    <div class="space-y-6">
       <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Tambah User</h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Admin bisa membuat dan mengelola user dalam aplikasi.
-        </p>
+        <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div class="flex flex-wrap items-center gap-3">
+              <h3 class="text-xl font-semibold text-gray-800 dark:text-white/90">User Management</h3>
+              <span class="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+                {{ users.length }} Users
+              </span>
+            </div>
+            <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
+              Halaman ini fokus untuk list dan pencarian user. Tambah atau edit user dilakukan di halaman terpisah agar lebih rapi.
+            </p>
+          </div>
 
-        <div class="mt-6 space-y-4">
-          <div>
-            <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Nama</label>
-            <input
-              v-model="createForm.name"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-              placeholder="Nama user"
-            />
+          <div class="flex flex-wrap gap-3">
+            <Button variant="outline" :disabled="loading" @click="bootstrap">
+              {{ loading ? 'Refreshing...' : 'Refresh' }}
+            </Button>
+            <router-link to="/users/new">
+              <Button>Add User</Button>
+            </router-link>
           </div>
-          <div>
-            <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
-            <input
-              v-model="createForm.email"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-              placeholder="email@domain.com"
-            />
-          </div>
-          <div>
-            <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
-            <input
-              v-model="createForm.password"
-              type="password"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-              placeholder="Password awal"
-            />
-          </div>
-          <div>
-            <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-            <select
-              v-model="createForm.role"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-            >
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-          <div>
-            <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Tenant</label>
-            <select
-              v-model.number="createForm.tenantId"
-              class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-            >
-              <option :value="0">Pilih tenant</option>
-              <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
-                {{ tenant.name }}
-              </option>
-            </select>
-          </div>
-          <label class="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
-            <input v-model="createForm.isActive" type="checkbox" />
-            User aktif
-          </label>
         </div>
 
-        <p v-if="formMessage" class="mt-4 text-sm text-success-600 dark:text-success-400">{{ formMessage }}</p>
-        <p v-if="formError" class="mt-4 text-sm text-error-600 dark:text-error-400">{{ formError }}</p>
-
-        <div class="mt-6 flex gap-3">
-          <Button :disabled="creating" @click="createUser">
-            {{ creating ? 'Menyimpan...' : 'Tambah User' }}
-          </Button>
-          <Button variant="outline" :disabled="loading" @click="bootstrap">Refresh</Button>
+        <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Total Users</p>
+            <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ users.length }}</p>
+          </div>
+          <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Active</p>
+            <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ activeUsersCount }}</p>
+          </div>
+          <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
+            <p class="text-xs uppercase tracking-wide text-gray-500">Admins</p>
+            <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ adminUsersCount }}</p>
+          </div>
         </div>
+
+        <p v-if="flashError" class="mt-4 text-sm text-error-600 dark:text-error-400">{{ flashError }}</p>
       </section>
 
-      <section class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Daftar User</h3>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ users.length }} user terdaftar.</p>
+      <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+        <div class="border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">Users Table</h4>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                List user per tenant dengan action menuju halaman edit biasa, tanpa popup.
+              </p>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row">
+              <input
+                v-model="search"
+                class="h-11 w-full rounded-xl border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90 sm:w-72"
+                placeholder="Cari nama atau email"
+              />
+              <select
+                v-model.number="selectedTenantId"
+                class="h-11 rounded-xl border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
+              >
+                <option :value="0">Semua tenant</option>
+                <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
+                  {{ tenant.name }}
+                </option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div class="mt-6 space-y-4">
-          <div
-            v-for="item in users"
-            :key="item.id"
-            class="rounded-2xl border border-gray-200 p-5 dark:border-gray-800"
-          >
-            <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <div>
-                <label class="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">Nama</label>
-                <input
-                  v-model="item.draft.name"
-                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-                />
-              </div>
-              <div>
-                <label class="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">Email</label>
-                <div class="flex h-11 items-center rounded-lg border border-gray-300 bg-gray-50 px-4 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
-                  {{ item.email }}
-                </div>
-              </div>
-              <div>
-                <label class="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">Role</label>
-                <select
-                  v-model="item.draft.role"
-                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-                >
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                  <option value="admin">admin</option>
-                </select>
-              </div>
-              <div>
-                <label class="mb-2 block text-xs font-medium uppercase tracking-wide text-gray-500">Tenant</label>
-                <select
-                  v-model.number="item.draft.tenantId"
-                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
-                >
-                  <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
-                    {{ tenant.name }}
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            <div class="mt-4 flex flex-wrap items-center gap-3">
-              <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input v-model="item.draft.isActive" type="checkbox" />
-                Aktif
-              </label>
-              <Button size="sm" :disabled="savingUserId === item.id" @click="updateUser(item.id)">
-                {{ savingUserId === item.id ? 'Menyimpan...' : 'Simpan' }}
-              </Button>
-              <Button size="sm" variant="outline" :disabled="resettingUserId === item.id" @click="resetPassword(item.id)">
-                {{ resettingUserId === item.id ? 'Reset...' : 'Reset Password' }}
-              </Button>
-            </div>
-          </div>
-
-          <p v-if="!users.length && !loading" class="text-sm text-gray-500 dark:text-gray-400">
-            Belum ada user.
-          </p>
+        <div class="overflow-x-auto">
+          <table class="min-w-full">
+            <thead class="bg-gray-50 dark:bg-gray-900/60">
+              <tr>
+                <th class="table-head">User</th>
+                <th class="table-head">Role</th>
+                <th class="table-head">Tenant</th>
+                <th class="table-head">Status</th>
+                <th class="table-head">Created</th>
+                <th class="table-head text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="loading">
+                <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Memuat user...
+                </td>
+              </tr>
+              <tr v-else-if="!filteredUsers.length">
+                <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Tidak ada user yang cocok dengan filter saat ini.
+                </td>
+              </tr>
+              <tr
+                v-for="item in filteredUsers"
+                :key="item.id"
+                class="border-t border-gray-200 dark:border-gray-800"
+              >
+                <td class="table-cell">
+                  <div>
+                    <p class="font-medium text-gray-800 dark:text-white/90">{{ item.name }}</p>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ item.email }}</p>
+                  </div>
+                </td>
+                <td class="table-cell">
+                  <span
+                    :class="[
+                      'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide',
+                      item.role === 'admin'
+                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+                    ]"
+                  >
+                    {{ item.role }}
+                  </span>
+                </td>
+                <td class="table-cell">
+                  <span class="text-sm text-gray-700 dark:text-gray-200">{{ item.tenant?.name || '-' }}</span>
+                </td>
+                <td class="table-cell">
+                  <span
+                    :class="[
+                      'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
+                      item.isActive
+                        ? 'bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-300'
+                        : 'bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-300',
+                    ]"
+                  >
+                    {{ item.isActive ? 'Active' : 'Inactive' }}
+                  </span>
+                </td>
+                <td class="table-cell text-sm text-gray-500 dark:text-gray-400">
+                  {{ formatDate(item.createdAt) }}
+                </td>
+                <td class="table-cell">
+                  <div class="flex justify-end gap-2">
+                    <router-link :to="`/users/${item.id}/edit`">
+                      <Button size="sm" variant="outline">Manage</Button>
+                    </router-link>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
@@ -151,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
@@ -160,6 +164,7 @@ import { apiFetch } from '@/lib/api'
 type TenantOption = {
   id: number
   name: string
+  slug?: string
 }
 
 type UserItem = {
@@ -169,127 +174,76 @@ type UserItem = {
   role: 'admin' | 'user'
   tenantId: number | null
   isActive: boolean
+  createdAt: string
   tenant?: TenantOption | null
-  draft: {
-    name: string
-    role: 'admin' | 'user'
-    tenantId: number
-    isActive: boolean
-  }
 }
 
 const loading = ref(false)
-const creating = ref(false)
-const savingUserId = ref<number | null>(null)
-const resettingUserId = ref<number | null>(null)
+const flashError = ref('')
 const tenants = ref<TenantOption[]>([])
 const users = ref<UserItem[]>([])
-const formMessage = ref('')
-const formError = ref('')
-const createForm = ref({
-  name: '',
-  email: '',
-  password: '',
-  role: 'user' as UserItem['role'],
-  tenantId: 0,
-  isActive: true,
+const search = ref('')
+const selectedTenantId = ref(0)
+
+const filteredUsers = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+
+  return users.value.filter((item) => {
+    const matchTenant = selectedTenantId.value === 0 || item.tenantId === selectedTenantId.value
+    const matchKeyword =
+      !keyword ||
+      item.name.toLowerCase().includes(keyword) ||
+      item.email.toLowerCase().includes(keyword)
+
+    return matchTenant && matchKeyword
+  })
 })
 
-function hydrateUsers(data: Array<Omit<UserItem, 'draft'>>) {
-  users.value = data.map((item) => ({
-    ...item,
-    draft: {
-      name: item.name,
-      role: item.role,
-      tenantId: item.tenantId || 0,
-      isActive: item.isActive,
-    },
-  }))
+const activeUsersCount = computed(() => users.value.filter((item) => item.isActive).length)
+const adminUsersCount = computed(() => users.value.filter((item) => item.role === 'admin').length)
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString('id-ID', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
 }
 
 async function bootstrap() {
   loading.value = true
+  flashError.value = ''
+
   try {
     const [tenantData, userData] = await Promise.all([
       apiFetch<TenantOption[]>('/tenants'),
-      apiFetch<Array<Omit<UserItem, 'draft'>>>('/users'),
+      apiFetch<UserItem[]>('/users'),
     ])
+
     tenants.value = tenantData
-    hydrateUsers(userData)
+    users.value = userData
+  } catch (error) {
+    flashError.value = error instanceof Error ? error.message : 'Gagal memuat data user'
   } finally {
     loading.value = false
   }
 }
 
-async function createUser() {
-  creating.value = true
-  formMessage.value = ''
-  formError.value = ''
-
-  try {
-    await apiFetch('/users', {
-      method: 'POST',
-      body: JSON.stringify(createForm.value),
-    })
-    formMessage.value = 'User berhasil dibuat.'
-    createForm.value = {
-      name: '',
-      email: '',
-      password: '',
-      role: 'user',
-      tenantId: tenants.value[0]?.id || 0,
-      isActive: true,
-    }
-    await bootstrap()
-  } catch (error) {
-    formError.value = error instanceof Error ? error.message : 'Gagal membuat user'
-  } finally {
-    creating.value = false
-  }
-}
-
-async function updateUser(id: number) {
-  const user = users.value.find((item) => item.id === id)
-  if (!user) return
-
-  savingUserId.value = id
-  formMessage.value = ''
-  formError.value = ''
-
-  try {
-    await apiFetch(`/users/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(user.draft),
-    })
-    formMessage.value = 'User berhasil diperbarui.'
-    await bootstrap()
-  } catch (error) {
-    formError.value = error instanceof Error ? error.message : 'Gagal memperbarui user'
-  } finally {
-    savingUserId.value = null
-  }
-}
-
-async function resetPassword(id: number) {
-  const password = window.prompt('Masukkan password baru (minimal 8 karakter):')
-  if (!password) return
-
-  resettingUserId.value = id
-  formMessage.value = ''
-  formError.value = ''
-
-  try {
-    await apiFetch(`/users/${id}/reset-password`, {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    })
-    formMessage.value = 'Password user berhasil direset.'
-  } catch (error) {
-    formError.value = error instanceof Error ? error.message : 'Gagal reset password'
-  } finally {
-    resettingUserId.value = null
-  }
-}
-
 onMounted(bootstrap)
 </script>
+
+<style scoped>
+.table-head {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(107 114 128);
+}
+
+.table-cell {
+  padding: 1rem 1.5rem;
+  vertical-align: middle;
+}
+</style>

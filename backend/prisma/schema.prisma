@@ -75,8 +75,23 @@ model Tenant {
   knowledgeSources     KnowledgeSource[]
   unansweredLeads      UnansweredLead[]
   processedMessages    ProcessedMessage[]
+  ragConfig            RagConfig?
 
   @@map("tenants")
+}
+
+model AssistantTemplate {
+  id            Int         @id @default(autoincrement())
+  name          String
+  slug          String      @unique
+  description   String?
+  assistantFlow Json        @map("assistant_flow")
+  isSystem      Boolean     @default(false) @map("is_system")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  ragConfigs    RagConfig[]
+
+  @@map("assistant_templates")
 }
 
 model AppUser {
@@ -192,4 +207,33 @@ model ProcessedMessage {
 
   @@unique([tenantId, messageId])
   @@map("processed_messages")
+}
+
+model RagConfig {
+  id                  Int      @id @default(autoincrement())
+  tenantId            Int      @unique @map("tenant_id")
+  assistantTemplateId Int?     @map("assistant_template_id")
+  assistantName       String?  @map("assistant_name")
+  businessContext     String?  @map("business_context")
+  greetingMessage     String?  @map("greeting_message")
+  clarifyMessage      String?  @map("clarify_message")
+  fallbackMessage     String?  @map("fallback_message")
+  thanksMessage       String?  @map("thanks_message")
+  salesCtaNew         String?  @map("sales_cta_new")
+  salesCtaInterested  String?  @map("sales_cta_interested")
+  salesCtaHot         String?  @map("sales_cta_hot")
+  salesCtaHandoff     String?  @map("sales_cta_handoff")
+  systemPrompt        String?  @map("system_prompt")
+  paymentPrompt       String?  @map("payment_prompt")
+  scoreThreshold      Float?   @map("score_threshold")
+  topK                Int?     @map("top_k")
+  maxChunks           Int?     @map("max_chunks")
+  chunkTargetTokens   Int?     @map("chunk_target_tokens")
+  assistantFlow       Json?    @map("assistant_flow")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assistantTemplate   AssistantTemplate? @relation(fields: [assistantTemplateId], references: [id], onDelete: SetNull)
+
+  @@map("rag_configs")
 }

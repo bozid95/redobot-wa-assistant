@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { AuthGuard } from '../common/auth.guard';
 import { Roles } from '../common/roles.decorator';
@@ -16,6 +26,11 @@ export class TenantsController {
     return this.tenantsService.list();
   }
 
+  @Get(':id')
+  async getById(@Param('id', ParseIntPipe) id: number) {
+    return this.tenantsService.getById(id);
+  }
+
   @Post()
   async create(@Body() body: { name?: string }) {
     return this.tenantsService.create(String(body.name || ''));
@@ -24,5 +39,10 @@ export class TenantsController {
   @Patch(':id')
   async update(@Param('id', ParseIntPipe) id: number, @Body() body: { name?: string }) {
     return this.tenantsService.update(id, String(body.name || ''));
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.tenantsService.remove(id);
   }
 }

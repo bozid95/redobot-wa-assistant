@@ -102,6 +102,47 @@ async function main() {
     ALTER TABLE IF EXISTS wa_instances
     ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
   `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE IF EXISTS rag_configs
+    ADD COLUMN IF NOT EXISTS assistant_flow JSONB;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS assistant_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      assistant_flow JSONB NOT NULL DEFAULT '{}'::jsonb,
+      is_system BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS assistant_templates_slug_key
+    ON assistant_templates (slug);
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE IF EXISTS rag_configs
+    ADD COLUMN IF NOT EXISTS assistant_template_id INTEGER;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TABLE rag_configs
+      ADD CONSTRAINT rag_configs_assistant_template_id_fkey
+      FOREIGN KEY (assistant_template_id)
+      REFERENCES assistant_templates(id)
+      ON DELETE SET NULL;
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
 }
 
 main()

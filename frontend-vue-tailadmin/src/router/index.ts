@@ -99,11 +99,81 @@ const router = createRouter({
       },
     },
     {
+      path: '/tenants/new',
+      name: 'Tenant New',
+      component: () => import('../views/App/TenantEditor.vue'),
+      meta: {
+        title: 'Add Tenant',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/tenants/:id/edit',
+      name: 'Tenant Edit',
+      component: () => import('../views/App/TenantEditor.vue'),
+      meta: {
+        title: 'Edit Tenant',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
       path: '/users',
       name: 'Users',
       component: () => import('../views/App/Users.vue'),
       meta: {
         title: 'Users',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/users/new',
+      name: 'User New',
+      component: () => import('../views/App/UserEditor.vue'),
+      meta: {
+        title: 'Add User',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/users/:id/edit',
+      name: 'User Edit',
+      component: () => import('../views/App/UserEditor.vue'),
+      meta: {
+        title: 'Edit User',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/ai-settings/rag-config',
+      name: 'AI Templates',
+      component: () => import('../views/App/AITemplates.vue'),
+      meta: {
+        title: 'AI Templates',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/ai-settings/rag-config/new',
+      name: 'AI Template New',
+      component: () => import('../views/App/RagConfig.vue'),
+      meta: {
+        title: 'New AI Template',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/ai-settings/rag-config/:id/edit',
+      name: 'AI Template Edit',
+      component: () => import('../views/App/RagConfig.vue'),
+      meta: {
+        title: 'Edit AI Template',
         requiresAuth: true,
         requiresAdmin: true,
       },

@@ -49,8 +49,63 @@ export class TenantsService {
           orderBy: { createdAt: 'asc' },
         },
         waInstances: true,
+        ragConfig: {
+          select: {
+            assistantTemplateId: true,
+            assistantTemplate: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                description: true,
+                isSystem: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
       },
     });
+  }
+
+  async getById(id: number) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id },
+      include: {
+        users: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            isActive: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        waInstances: true,
+        ragConfig: {
+          select: {
+            assistantTemplateId: true,
+            assistantTemplate: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                description: true,
+                isSystem: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant tidak ditemukan');
+    }
+
+    return tenant;
   }
 
   async create(name: string) {
@@ -102,5 +157,42 @@ export class TenantsService {
         waInstances: true,
       },
     });
+  }
+
+  async remove(id: number) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id },
+      include: {
+        users: {
+          select: { id: true },
+        },
+        waInstances: {
+          select: { id: true },
+        },
+        knowledgeSources: {
+          select: { id: true },
+        },
+        conversations: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant tidak ditemukan');
+    }
+
+    await this.prisma.tenant.delete({
+      where: { id },
+    });
+
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      detachedUsers: tenant.users.length,
+      detachedInstances: tenant.waInstances.length,
+      detachedKnowledgeSources: tenant.knowledgeSources.length,
+      detachedConversations: tenant.conversations.length,
+    };
   }
 }

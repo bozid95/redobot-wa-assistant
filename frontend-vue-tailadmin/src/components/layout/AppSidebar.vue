@@ -83,7 +83,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { GridIcon, HorizontalDots, PlugInIcon } from '../../icons'
-import { Inbox, RadioTower, BookOpenText, Users, Building2, UserCircle2 } from 'lucide-vue-next'
+import { Inbox, RadioTower, BookOpenText, Users, Building2, UserCircle2, BrainCircuit } from 'lucide-vue-next'
 import SidebarWidget from './SidebarWidget.vue'
 import { useSidebar } from '@/composables/useSidebar'
 import { useAuth } from '@/composables/useAuth'
@@ -116,6 +116,7 @@ const menuGroups = computed(() => {
       items: [
         { icon: Building2, name: 'Tenants', path: '/tenants' },
         { icon: Users, name: 'Users', path: '/users' },
+        { icon: BrainCircuit, name: 'AI Templates', path: '/ai-settings/rag-config' },
       ],
     })
   }

@@ -43,6 +43,23 @@ export class UsersService {
     });
   }
 
+  async getById(id: number) {
+    const user = await this.prisma.appUser.findUnique({
+      where: { id },
+      include: {
+        tenant: {
+          select: { id: true, name: true, slug: true },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User tidak ditemukan');
+    }
+
+    return user;
+  }
+
   async create(input: CreateUserInput) {
     const email = String(input.email || '').trim().toLowerCase();
     const password = String(input.password || '');
@@ -122,6 +139,31 @@ export class UsersService {
         passwordHash: hashSync(trimmedPassword, 10),
       },
     });
+
+    return { ok: true };
+  }
+
+  async remove(id: number, actorId?: number) {
+    const user = await this.prisma.appUser.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User tidak ditemukan');
+    }
+
+    if (actorId != null && Number(actorId) === id) {
+      throw new BadRequestException('User yang sedang login tidak bisa menghapus dirinya sendiri');
+    }
+
+    if (user.role === UserRole.admin) {
+      const adminCount = await this.prisma.appUser.count({
+        where: { role: UserRole.admin, isActive: true },
+      });
+
+      if (adminCount <= 1) {
+        throw new BadRequestException('Minimal harus ada satu admin aktif di sistem');
+      }
+    }
+
+    await this.prisma.appUser.delete({ where: { id } });
 
     return { ok: true };
   }

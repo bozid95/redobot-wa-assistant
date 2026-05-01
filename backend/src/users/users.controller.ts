@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { AuthGuard } from '../common/auth.guard';
 import { Roles } from '../common/roles.decorator';
@@ -14,6 +14,11 @@ export class UsersController {
   @Get()
   async list(@Query('tenantId') tenantId?: string) {
     return this.usersService.list(tenantId ? Number(tenantId) : undefined);
+  }
+
+  @Get(':id')
+  async getById(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.getById(id);
   }
 
   @Post()
@@ -63,5 +68,10 @@ export class UsersController {
     @Body() body: { password?: string },
   ) {
     return this.usersService.resetPassword(id, String(body.password || ''));
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number, @Req() request: { user?: { sub?: number } }) {
+    return this.usersService.remove(id, request.user?.sub);
   }
 }
