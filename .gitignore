@@ -1,0 +1,10 @@
+.env
+*.log
+node_modules/
+backend/node_modules/
+backend/dist/
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+.DS_Store
+Thumbs.db

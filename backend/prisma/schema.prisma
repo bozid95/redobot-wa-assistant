@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConversationStatus {
+  open
+  takeover
+  closed
+}
+
+enum MessageRole {
+  user
+  assistant
+  admin
+  system
+}
+
+enum MessageSource {
+  evolution
+  rag
+  fallback
+  manual_reply
+  router_greeting
+  router_clarify
+  router_thanks
+  takeover
+}
+
+enum LeadReason {
+  no_match
+  low_confidence
+  llm_error
+  system_error
+}
+
+enum LeadStatus {
+  open
+  closed
+}
+
+enum KnowledgeStatus {
+  pending
+  indexed
+  error
+}
+
+enum WaInstanceStatus {
+  not_created
+  connecting
+  connected
+  disconnected
+  error
+}
+
+model AppUser {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String   @default("Admin")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("app_users")
+}
+
+model WaInstance {
+  id              Int              @id @default(autoincrement())
+  instanceName    String           @unique @map("instance_name")
+  phoneNumber     String?          @map("phone_number")
+  status          WaInstanceStatus @default(not_created)
+  qrCodeBase64    String?          @map("qr_code_base64")
+  lastError       String?          @map("last_error")
+  lastConnectedAt DateTime?        @map("last_connected_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  @@map("wa_instances")
+}
+
+model Conversation {
+  id              Int                   @id @default(autoincrement())
+  phone           String                @unique
+  customerName    String?               @map("customer_name")
+  status          ConversationStatus    @default(open)
+  leadStage       String                @default("new") @map("lead_stage")
+  leadScore       Int                   @default(0) @map("lead_score")
+  handoffSuggested Boolean              @default(false) @map("handoff_suggested")
+  paymentRequested Boolean              @default(false) @map("payment_requested")
+  paymentProofReceived Boolean          @default(false) @map("payment_proof_received")
+  takeoverEnabled Boolean               @default(false) @map("takeover_enabled")
+  lastMessageAt   DateTime              @default(now()) @map("last_message_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  messages        ConversationMessage[]
+  leads           UnansweredLead[]
+
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             Int          @id @default(autoincrement())
+  conversationId Int          @map("conversation_id")
+  phone          String
+  role           MessageRole
+  source         MessageSource @default(evolution)
+  message        String
+  messageId      String?      @map("message_id")
+  metadata       Json?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_messages")
+}
+
+model KnowledgeSource {
+  id            Int             @id @default(autoincrement())
+  title         String
+  content       String
+  sourceType    String          @default("text") @map("source_type")
+  sourcePath    String?         @unique @map("source_path")
+  status        KnowledgeStatus @default(pending)
+  lastIndexedAt DateTime?       @map("last_indexed_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@map("knowledge_sources")
+}
+
+model UnansweredLead {
+  id             Int           @id @default(autoincrement())
+  conversationId Int?          @map("conversation_id")
+  phone          String
+  question       String
+  reason         LeadReason
+  status         LeadStatus    @default(open)
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@map("unanswered_leads")
+}
+
+model ProcessedMessage {
+  messageId String   @id @map("message_id")
+  phone     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("processed_messages")
+}

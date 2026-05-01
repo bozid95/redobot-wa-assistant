@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "shadcnVue": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/frontend/node_modules/.bin/shadcn-vue.cmd",
+      "args": [
+        "mcp",
+        "-c",
+        "${workspaceFolder}/frontend"
+      ]
+    }
+  }
+}
