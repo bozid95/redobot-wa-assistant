@@ -1,0 +1,56 @@
+import { readonly, ref } from 'vue'
+import { apiFetch } from '@/lib/api'
+
+type AuthUser = {
+  id?: number
+  name?: string
+  email?: string
+}
+
+const user = ref<AuthUser | null>(null)
+const hydrated = ref(false)
+const loading = ref(false)
+
+export function useAuth() {
+  async function fetchMe(force = false) {
+    if (loading.value) return user.value
+    if (hydrated.value && !force) return user.value
+
+    loading.value = true
+
+    try {
+      user.value = await apiFetch<AuthUser>('/auth/me')
+    } catch {
+      user.value = null
+    } finally {
+      hydrated.value = true
+      loading.value = false
+    }
+
+    return user.value
+  }
+
+  async function login(email: string, password: string) {
+    user.value = await apiFetch<AuthUser>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+    hydrated.value = true
+    return user.value
+  }
+
+  async function logout() {
+    await apiFetch('/auth/logout', { method: 'POST' })
+    user.value = null
+    hydrated.value = true
+  }
+
+  return {
+    user: readonly(user),
+    hydrated: readonly(hydrated),
+    loading: readonly(loading),
+    fetchMe,
+    login,
+    logout,
+  }
+}

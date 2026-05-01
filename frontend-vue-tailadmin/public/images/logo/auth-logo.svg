@@ -1,0 +1,10 @@
+<svg width="231" height="48" viewBox="0 0 231 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="48" height="48" rx="14" fill="#FF5A4F"/>
+  <rect x="10" y="10" width="28" height="28" rx="10" fill="white"/>
+  <circle cx="18.5" cy="24" r="2.2" fill="#D92D20"/>
+  <circle cx="29.5" cy="24" r="2.2" fill="#D92D20"/>
+  <path d="M17.5 30C19.4 31.9 21.5 32.8 24 32.8C26.5 32.8 28.6 31.9 30.5 30" stroke="#D92D20" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M15.5 13L13.5 10.3" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <path d="M32.5 13L34.5 10.3" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <text x="62" y="30" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" letter-spacing="0.3">redobot</text>
+</svg>
