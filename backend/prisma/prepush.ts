@@ -134,11 +134,13 @@ async function main() {
   await prisma.$executeRawUnsafe(`
     DO $$
     BEGIN
-      ALTER TABLE rag_configs
-      ADD CONSTRAINT rag_configs_assistant_template_id_fkey
-      FOREIGN KEY (assistant_template_id)
-      REFERENCES assistant_templates(id)
-      ON DELETE SET NULL;
+      IF to_regclass('public.rag_configs') IS NOT NULL THEN
+        ALTER TABLE rag_configs
+        ADD CONSTRAINT rag_configs_assistant_template_id_fkey
+        FOREIGN KEY (assistant_template_id)
+        REFERENCES assistant_templates(id)
+        ON DELETE SET NULL;
+      END IF;
     EXCEPTION
       WHEN duplicate_object THEN NULL;
     END $$;
