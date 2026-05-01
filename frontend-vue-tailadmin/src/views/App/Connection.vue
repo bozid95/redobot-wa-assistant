@@ -30,22 +30,6 @@
             <Button variant="outline" :startIcon="RefreshCw" :disabled="loading" @click="loadData">Refresh</Button>
           </div>
         </div>
-
-        <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-          <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Operational Notes</h3>
-
-          <div v-if="errorLines.length" class="mt-4 space-y-3">
-            <div
-              v-for="(line, index) in errorLines"
-              :key="`${index}-${line}`"
-              class="rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-400"
-            >
-              {{ line }}
-            </div>
-          </div>
-
-          <p v-else class="mt-4 text-sm text-gray-500 dark:text-gray-400">Tidak ada error koneksi.</p>
-        </div>
       </div>
 
       <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
@@ -119,12 +103,6 @@ const instanceName = computed(() => data.value?.instanceName || data.value?.inst
 const connectionStatus = computed(() => String(data.value?.status || 'not_created'))
 const phoneNumber = computed(() => data.value?.phoneNumber || data.value?.phone_number || 'Belum terhubung')
 const qrCode = computed(() => data.value?.qrCodeBase64 || data.value?.qr_code_base64 || '')
-const errorLines = computed(() =>
-  String(data.value?.lastError || data.value?.last_error || '')
-    .split(/\s+\|\s+/)
-    .map((item) => item.trim())
-    .filter(Boolean),
-)
 const isConnected = computed(() => connectionStatus.value.toLowerCase() === 'connected')
 const canDisconnect = computed(() => !['not_created', 'disconnected'].includes(connectionStatus.value.toLowerCase()))
 

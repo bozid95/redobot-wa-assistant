@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,6 +13,13 @@ type KnowledgeArticleInput = {
 export class KnowledgeService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private docId(source: { id: number; title: string; sourcePath: string | null }, tenantId: number) {
+    return crypto
+      .createHash('sha256')
+      .update(`${tenantId}:${source.sourcePath || `knowledge:${source.id}:${source.title}`}`)
+      .digest('hex');
+  }
+
   private get uploadDir() {
     return process.env.UPLOAD_DIR || '/app/uploads';
   }
@@ -21,21 +28,26 @@ export class KnowledgeService {
     return String(process.env.TIKA_URL || 'http://tika:9998').replace(/\/$/, '');
   }
 
-  async list() {
+  async list(tenantId: number) {
     return this.prisma.knowledgeSource.findMany({
+      where: { tenantId },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
-  async getById(id: number) {
-    return this.prisma.knowledgeSource.findUnique({
-      where: { id },
+  async getById(tenantId: number, id: number) {
+    return this.prisma.knowledgeSource.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
     });
   }
 
-  async createArticle(input: KnowledgeArticleInput) {
+  async createArticle(tenantId: number, input: KnowledgeArticleInput) {
     return this.prisma.knowledgeSource.create({
       data: {
+        tenantId,
         title: input.title.trim(),
         content: input.content.trim(),
         sourceType: 'text',
@@ -45,7 +57,12 @@ export class KnowledgeService {
     });
   }
 
-  async updateArticle(id: number, input: KnowledgeArticleInput) {
+  async updateArticle(tenantId: number, id: number, input: KnowledgeArticleInput) {
+    const source = await this.getById(tenantId, id);
+    if (!source) {
+      throw new NotFoundException('Knowledge tidak ditemukan');
+    }
+
     return this.prisma.knowledgeSource.update({
       where: { id },
       data: {
@@ -56,18 +73,13 @@ export class KnowledgeService {
     });
   }
 
-  async deleteArticle(id: number) {
-    const source = await this.prisma.knowledgeSource.findUnique({
-      where: { id },
-    });
+  async deleteArticle(tenantId: number, id: number) {
+    const source = await this.getById(tenantId, id);
     if (!source) {
       return { ok: true };
     }
 
-    const docId = crypto
-      .createHash('sha256')
-      .update(source.sourcePath || `knowledge:${source.id}:${source.title}`)
-      .digest('hex');
+    const docId = this.docId(source, tenantId);
 
     await fetch(
       `${process.env.QDRANT_URL || 'http://qdrant:6333'}/collections/${encodeURIComponent(process.env.QDRANT_COLLECTION || 'wa_kb')}/points/delete`,
@@ -76,7 +88,10 @@ export class KnowledgeService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filter: {
-            must: [{ key: 'doc_id', match: { value: docId } }],
+            must: [
+              { key: 'doc_id', match: { value: docId } },
+              { key: 'tenant_id', match: { value: tenantId } },
+            ],
           },
         }),
       },
@@ -127,6 +142,7 @@ export class KnowledgeService {
         id: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`,
         payload: {
           doc_id: docMeta.docId,
+          tenant_id: docMeta.tenantId,
           title: docMeta.title,
           source_type: docMeta.sourceType,
           source_path: docMeta.sourcePath,
@@ -174,9 +190,12 @@ export class KnowledgeService {
     return response.text();
   }
 
-  async reindex(ids?: number[]) {
+  async reindex(tenantId: number, ids?: number[]) {
     const sources = await this.prisma.knowledgeSource.findMany({
-      where: ids?.length ? { id: { in: ids } } : undefined,
+      where: {
+        tenantId,
+        ...(ids?.length ? { id: { in: ids } } : {}),
+      },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -194,12 +213,10 @@ export class KnowledgeService {
           ? cleaned.split(/\f+/).map((page) => this.cleanText(page)).filter(Boolean)
           : [cleaned];
 
-        const docId = crypto
-          .createHash('sha256')
-          .update(source.sourcePath || `knowledge:${source.id}:${source.title}`)
-          .digest('hex');
+        const docId = this.docId(source, tenantId);
         const docMeta = {
           docId,
+          tenantId,
           title: source.title,
           sourceType: source.sourceType,
           sourcePath: source.sourcePath || `knowledge://${source.id}`,
@@ -213,7 +230,10 @@ export class KnowledgeService {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               filter: {
-                must: [{ key: 'doc_id', match: { value: docId } }],
+                must: [
+                  { key: 'doc_id', match: { value: docId } },
+                  { key: 'tenant_id', match: { value: tenantId } },
+                ],
               },
             }),
           },

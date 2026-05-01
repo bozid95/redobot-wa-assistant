@@ -31,4 +31,4 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 4000
-CMD ["sh", "-c", "mkdir -p /app/uploads /app/knowledge && npm run prisma:push && npm run prisma:seed && node dist/src/main.js"]
+CMD ["sh", "-c", "mkdir -p /app/uploads /app/knowledge && npm run prisma:push:accept && npm run prisma:seed && node dist/src/main.js"]

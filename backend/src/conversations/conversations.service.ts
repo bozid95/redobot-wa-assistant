@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { SessionPayload } from '../common/auth.guard';
 
 @Injectable()
 export class ConversationsService {
@@ -9,9 +10,14 @@ export class ConversationsService {
     private readonly whatsappService: WhatsappService,
   ) {}
 
-  async list(status?: string, search?: string) {
+  private getTenantId(user: SessionPayload) {
+    return user.tenantId ?? 0;
+  }
+
+  async list(user: SessionPayload, status?: string, search?: string) {
     return this.prisma.conversation.findMany({
       where: {
+        tenantId: this.getTenantId(user),
         ...(status ? { status: status as any } : {}),
         ...(search
           ? {
@@ -24,6 +30,9 @@ export class ConversationsService {
       },
       orderBy: { lastMessageAt: 'desc' },
       include: {
+        tenant: {
+          select: { id: true, name: true, slug: true },
+        },
         messages: {
           take: 1,
           orderBy: { createdAt: 'desc' },
@@ -32,24 +41,32 @@ export class ConversationsService {
     });
   }
 
-  async getOne(id: number) {
-    const conversation = await this.prisma.conversation.findUnique({ where: { id } });
+  async getOne(user: SessionPayload, id: number) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: {
+        id,
+        tenantId: this.getTenantId(user),
+      },
+    });
     if (!conversation) {
       throw new NotFoundException('Conversation not found');
     }
     return conversation;
   }
 
-  async getMessages(id: number) {
-    await this.getOne(id);
+  async getMessages(user: SessionPayload, id: number) {
+    await this.getOne(user, id);
     return this.prisma.conversationMessage.findMany({
-      where: { conversationId: id },
+      where: {
+        conversationId: id,
+        tenantId: this.getTenantId(user),
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
 
-  async setTakeover(id: number, enabled: boolean) {
-    const conversation = await this.getOne(id);
+  async setTakeover(user: SessionPayload, id: number, enabled: boolean) {
+    const conversation = await this.getOne(user, id);
     const updated = await this.prisma.conversation.update({
       where: { id },
       data: {
@@ -60,6 +77,7 @@ export class ConversationsService {
 
     await this.prisma.conversationMessage.create({
       data: {
+        tenantId: this.getTenantId(user),
         conversationId: id,
         phone: conversation.phone,
         role: 'system',
@@ -72,8 +90,8 @@ export class ConversationsService {
     return updated;
   }
 
-  async manualReply(id: number, reply: string) {
-    const conversation = await this.getOne(id);
+  async manualReply(user: SessionPayload, id: number, reply: string) {
+    const conversation = await this.getOne(user, id);
     await this.prisma.conversation.update({
       where: { id },
       data: {
@@ -83,10 +101,11 @@ export class ConversationsService {
       },
     });
 
-    const payload = await this.whatsappService.sendText(conversation.phone, reply);
+    const payload = await this.whatsappService.sendText(this.getTenantId(user), conversation.phone, reply);
 
     await this.prisma.conversationMessage.create({
       data: {
+        tenantId: this.getTenantId(user),
         conversationId: id,
         phone: conversation.phone,
         role: 'admin',

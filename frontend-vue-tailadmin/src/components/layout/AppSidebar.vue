@@ -80,31 +80,53 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { GridIcon, HorizontalDots, PlugInIcon } from '../../icons'
-import { Inbox, RadioTower, BookOpenText, Users } from 'lucide-vue-next'
+import { Inbox, RadioTower, BookOpenText, Users, Building2, UserCircle2 } from 'lucide-vue-next'
 import SidebarWidget from './SidebarWidget.vue'
 import { useSidebar } from '@/composables/useSidebar'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
 const { isExpanded, isMobileOpen, isHovered } = useSidebar()
+const auth = useAuth()
 
-const menuGroups = [
-  {
-    title: 'Menu',
-    items: [
-      { icon: GridIcon, name: 'Overview', path: '/' },
-      { icon: RadioTower, name: 'Connection', path: '/connection' },
-      { icon: Inbox, name: 'Inbox', path: '/inbox' },
-      { icon: BookOpenText, name: 'Knowledge', path: '/knowledge' },
-      { icon: Users, name: 'Leads', path: '/leads' },
-    ],
-  },
-  {
+const menuGroups = computed(() => {
+  const groups = [
+    {
+      title: 'Menu',
+      items: [
+        { icon: GridIcon, name: 'Overview', path: '/' },
+        { icon: RadioTower, name: 'Connection', path: '/connection' },
+        { icon: Inbox, name: 'Inbox', path: '/inbox' },
+        { icon: BookOpenText, name: 'Knowledge', path: '/knowledge' },
+        { icon: Users, name: 'Leads', path: '/leads' },
+      ],
+    },
+    {
+      title: 'Account',
+      items: [{ icon: UserCircle2, name: 'Profile', path: '/profile' }],
+    },
+  ]
+
+  if (auth.user.value?.role === 'admin') {
+    groups.push({
+      title: 'Management',
+      items: [
+        { icon: Building2, name: 'Tenants', path: '/tenants' },
+        { icon: Users, name: 'Users', path: '/users' },
+      ],
+    })
+  }
+
+  groups.push({
     title: 'Session',
     items: [{ icon: PlugInIcon, name: 'Login', path: '/login' }],
-  },
-]
+  })
+
+  return groups
+})
 
 const isActive = (path) => {
   if (path === '/') return route.path === '/'

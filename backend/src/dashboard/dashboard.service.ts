@@ -1,27 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionPayload } from '../common/auth.guard';
 
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async overview() {
+  private getTenantId(user: SessionPayload) {
+    return user.tenantId ?? 0;
+  }
+
+  async overview(user: SessionPayload) {
+    const tenantId = this.getTenantId(user);
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
     const [instance, chatsToday, fallbackToday, takeoverActive, openLeads] = await Promise.all([
-      this.prisma.waInstance.findFirst({ orderBy: { updatedAt: 'desc' } }),
+      this.prisma.waInstance.findUnique({ where: { tenantId } }),
       this.prisma.conversationMessage.count({
-        where: { role: 'user', createdAt: { gte: startOfDay } },
+        where: { tenantId, role: 'user', createdAt: { gte: startOfDay } },
       }),
       this.prisma.unansweredLead.count({
-        where: { createdAt: { gte: startOfDay } },
+        where: { tenantId, createdAt: { gte: startOfDay } },
       }),
       this.prisma.conversation.count({
-        where: { takeoverEnabled: true },
+        where: { tenantId, takeoverEnabled: true },
       }),
       this.prisma.unansweredLead.count({
-        where: { status: 'open' },
+        where: { tenantId, status: 'open' },
       }),
     ]);
 
@@ -36,15 +42,19 @@ export class DashboardService {
     };
   }
 
-  async listLeads() {
+  async listLeads(user: SessionPayload) {
     return this.prisma.unansweredLead.findMany({
+      where: { tenantId: this.getTenantId(user) },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async closeLead(id: number) {
-    return this.prisma.unansweredLead.update({
-      where: { id },
+  async closeLead(user: SessionPayload, id: number) {
+    return this.prisma.unansweredLead.updateMany({
+      where: {
+        id,
+        tenantId: this.getTenantId(user),
+      },
       data: { status: 'closed' },
     });
   }

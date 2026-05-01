@@ -2,9 +2,13 @@ import { readonly, ref } from 'vue'
 import { apiFetch } from '@/lib/api'
 
 type AuthUser = {
-  id?: number
-  name?: string
-  email?: string
+  id: number
+  name: string
+  email: string
+  role: 'admin' | 'user'
+  tenantId: number | null
+  tenantName: string | null
+  isActive: boolean
 }
 
 const user = ref<AuthUser | null>(null)
@@ -39,6 +43,22 @@ export function useAuth() {
     return user.value
   }
 
+  async function updateProfile(name: string) {
+    user.value = await apiFetch<AuthUser>('/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    })
+    hydrated.value = true
+    return user.value
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    return apiFetch<{ ok: boolean }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    })
+  }
+
   async function logout() {
     await apiFetch('/auth/logout', { method: 'POST' })
     user.value = null
@@ -51,6 +71,8 @@ export function useAuth() {
     loading: readonly(loading),
     fetchMe,
     login,
+    updateProfile,
+    changePassword,
     logout,
   }
 }

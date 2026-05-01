@@ -65,11 +65,19 @@ export class WebhooksService {
     return hasMedia || /\b(sudah transfer|sudah bayar|bukti bayar|bukti transfer|transfer ya|saya transfer)\b/i.test(lower);
   }
 
-  async handleEvolutionWebhook(input: any) {
+  async handleEvolutionWebhook(input: any, routeInstanceName?: string) {
     const payload = input?.body ?? input ?? {};
     const data = payload.data ?? payload;
     const key = data.key ?? payload.key ?? {};
     const message = data.message ?? payload.message ?? {};
+    const instanceName = String(
+      routeInstanceName ||
+      payload.instanceName ||
+      data.instanceName ||
+      payload.instance ||
+      data.instance ||
+      '',
+    ).trim();
 
     const text =
       message.conversation ??
@@ -93,9 +101,16 @@ export class WebhooksService {
       return { ignored: true };
     }
 
+    const instance = await this.whatsappService.getInstanceByName(instanceName);
+    if (!instance?.tenantId) {
+      return { ignored: true, reason: 'unknown_instance' };
+    }
+
+    const tenantId = instance.tenantId;
+
     try {
       await this.prisma.processedMessage.create({
-        data: { messageId, phone },
+        data: { tenantId, messageId, phone },
       });
     } catch {
       return { deduplicated: true };
@@ -104,12 +119,18 @@ export class WebhooksService {
     const intents = this.detectIntents(question);
 
     const conversation = await this.prisma.conversation.upsert({
-      where: { phone },
+      where: {
+        tenantId_phone: {
+          tenantId,
+          phone,
+        },
+      },
       update: {
         customerName: pushName ?? undefined,
         lastMessageAt: new Date(),
       },
       create: {
+        tenantId,
         phone,
         customerName: pushName,
       },
@@ -122,6 +143,7 @@ export class WebhooksService {
 
     await this.prisma.conversationMessage.create({
       data: {
+        tenantId,
         conversationId: conversation.id,
         phone,
         role: 'user',
@@ -140,7 +162,7 @@ export class WebhooksService {
 
     if (conversation.paymentRequested && !conversation.paymentProofReceived && this.looksLikePaymentProof(question, message)) {
       const confirmationReply = 'Siap kak, bukti bayar sudah saya terima dan data kakak sudah kami simpan. Admin akan lanjut cek pembayaran dan menghubungi kakak untuk konfirmasi berikutnya ya.';
-      const responsePayload = await this.whatsappService.sendText(phone, confirmationReply);
+      const responsePayload = await this.whatsappService.sendText(tenantId, phone, confirmationReply);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -152,6 +174,7 @@ export class WebhooksService {
       });
       await this.prisma.conversationMessage.create({
         data: {
+          tenantId,
           conversationId: conversation.id,
           phone,
           role: 'assistant',
@@ -167,7 +190,10 @@ export class WebhooksService {
     }
 
     const recentMessages = await this.prisma.conversationMessage.findMany({
-      where: { conversationId: conversation.id },
+      where: {
+        tenantId,
+        conversationId: conversation.id,
+      },
       orderBy: { createdAt: 'desc' },
       take: 6,
     });
@@ -181,6 +207,7 @@ export class WebhooksService {
       }));
 
     const ragResult = await this.ragService.generate(question, normalizedText, history, {
+      tenantId,
       leadStage: nextLeadStage,
       leadScore: nextLeadScore,
       shouldOfferHandoff,
@@ -189,7 +216,7 @@ export class WebhooksService {
     });
 
     if (ragResult.action === 'answer') {
-      const responsePayload = await this.whatsappService.sendText(phone, ragResult.reply);
+      const responsePayload = await this.whatsappService.sendText(tenantId, phone, ragResult.reply);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -202,6 +229,7 @@ export class WebhooksService {
       });
       await this.prisma.conversationMessage.create({
         data: {
+          tenantId,
           conversationId: conversation.id,
           phone,
           role: 'assistant',
@@ -216,9 +244,10 @@ export class WebhooksService {
       return { ok: true, mode: 'auto-reply' };
     }
 
-    const responsePayload = await this.whatsappService.sendText(phone, ragResult.reply);
+    const responsePayload = await this.whatsappService.sendText(tenantId, phone, ragResult.reply);
     await this.prisma.unansweredLead.create({
       data: {
+        tenantId,
         conversationId: conversation.id,
         phone,
         question,
@@ -240,6 +269,7 @@ export class WebhooksService {
     });
     await this.prisma.conversationMessage.create({
       data: {
+        tenantId,
         conversationId: conversation.id,
         phone,
         role: 'assistant',

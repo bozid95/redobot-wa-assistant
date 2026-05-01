@@ -80,6 +80,35 @@ const router = createRouter({
       },
     },
     {
+      path: '/profile',
+      name: 'Profile',
+      component: () => import('../views/App/Profile.vue'),
+      meta: {
+        title: 'Profile',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/tenants',
+      name: 'Tenants',
+      component: () => import('../views/App/Tenants.vue'),
+      meta: {
+        title: 'Tenants',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
+      path: '/users',
+      name: 'Users',
+      component: () => import('../views/App/Users.vue'),
+      meta: {
+        title: 'Users',
+        requiresAuth: true,
+        requiresAdmin: true,
+      },
+    },
+    {
       path: '/login',
       name: 'Login',
       component: () => import('../views/Auth/Signin.vue'),
@@ -103,6 +132,14 @@ router.beforeEach(async (to, from, next) => {
     await auth.fetchMe()
     if (!auth.user.value) {
       next('/login')
+      return
+    }
+  }
+
+  if (to.meta.requiresAdmin) {
+    await auth.fetchMe()
+    if (!auth.user.value || auth.user.value.role !== 'admin') {
+      next('/')
       return
     }
   }

@@ -17,6 +17,7 @@
       <div>
         <span class="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">{{ displayName }}</span>
         <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">{{ displayEmail }}</span>
+        <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">{{ displayRoleTenant }}</span>
       </div>
 
       <ul class="flex flex-col gap-1 border-b border-gray-200 pt-4 pb-3 dark:border-gray-800">
@@ -53,14 +54,27 @@ const dropdownOpen = ref(false)
 const dropdownRef = ref(null)
 const auth = useAuth()
 
-const menuItems = [
-  { href: '/', icon: UserCircleIcon, text: 'Overview' },
-  { href: '/connection', icon: SettingsIcon, text: 'Connection' },
-  { href: '/knowledge', icon: InfoCircleIcon, text: 'Knowledge' },
-]
+const menuItems = computed(() => {
+  const items = [
+    { href: '/profile', icon: UserCircleIcon, text: 'Profile' },
+    { href: '/connection', icon: SettingsIcon, text: 'Connection' },
+    { href: '/knowledge', icon: InfoCircleIcon, text: 'Knowledge' },
+  ]
+
+  if (auth.user.value?.role === 'admin') {
+    items.unshift({ href: '/users', icon: UserCircleIcon, text: 'Users' })
+  }
+
+  return items
+})
 
 const displayName = computed(() => auth.user.value?.name || auth.user.value?.email || 'Admin')
 const displayEmail = computed(() => auth.user.value?.email || 'admin@example.com')
+const displayRoleTenant = computed(() => {
+  const role = auth.user.value?.role?.replace('_', ' ') || 'admin'
+  const tenant = auth.user.value?.tenantName || 'Workspace default'
+  return `${role} • ${tenant}`
+})
 
 const toggleDropdown = () => {
   dropdownOpen.value = !dropdownOpen.value

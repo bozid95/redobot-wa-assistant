@@ -28,6 +28,7 @@ type ConversationTurn = {
 type IntentKey = 'price' | 'requirement' | 'schedule' | 'location' | 'registration' | 'contact';
 type SalesStage = 'new' | 'discovery' | 'interested' | 'hot' | 'handoff';
 type SalesContext = {
+  tenantId: number;
   leadStage: SalesStage;
   leadScore: number;
   shouldOfferHandoff: boolean;
@@ -149,7 +150,7 @@ export class RagService {
     return Number(process.env.RAG_MAX_CONTEXT_CHUNKS || 3);
   }
 
-  private async retrieveKnowledge(query: string) {
+  private async retrieveKnowledge(query: string, tenantId: number) {
     const embeddingRes = await fetch(`${this.embeddingBaseUrl}/embeddings`, {
       method: 'POST',
       headers: {
@@ -180,6 +181,9 @@ export class RagService {
           vector,
           limit: this.topK,
           with_payload: true,
+          filter: {
+            must: [{ key: 'tenant_id', match: { value: tenantId } }],
+          },
         }),
       },
     );
@@ -203,9 +207,12 @@ export class RagService {
     return { rawResults, matches };
   }
 
-  private async buildPaymentInstructions() {
+  private async buildPaymentInstructions(tenantId: number) {
     try {
-      const { matches } = await this.retrieveKnowledge('metode pembayaran transfer bank rekening pembayaran bukti bayar konfirmasi pembayaran');
+      const { matches } = await this.retrieveKnowledge(
+        'metode pembayaran transfer bank rekening pembayaran bukti bayar konfirmasi pembayaran',
+        tenantId,
+      );
       if (matches.length === 0) {
         return 'Silakan lanjut transfer sesuai rekening pembayaran yang berlaku, lalu kirim bukti bayarnya di chat ini ya kak.';
       }
@@ -463,7 +470,7 @@ export class RagService {
   }
 
   private async buildHandoffReply(data: CollectedLeadData, salesContext?: SalesContext) {
-    const paymentInstructions = await this.buildPaymentInstructions();
+    const paymentInstructions = await this.buildPaymentInstructions(salesContext?.tenantId ?? 0);
     const pieces = [
       'Siap kak, data kakak sudah saya catat.',
       data.name ? `Nama: ${data.name}.` : null,
@@ -547,7 +554,7 @@ export class RagService {
     ) {
       return {
         action: 'answer',
-        reply: await this.buildPaymentInstructions(),
+        reply: await this.buildPaymentInstructions(salesContext.tenantId),
         source: 'rag',
         metadata: {
           source: 'rag',
@@ -628,7 +635,10 @@ export class RagService {
       const queryWithHints = detectedIntents.length
         ? `${searchQuery}\n${this.buildIntentHints(detectedIntents)}`
         : searchQuery;
-      const { rawResults, matches } = await this.retrieveKnowledge(queryWithHints);
+      const { rawResults, matches } = await this.retrieveKnowledge(
+        queryWithHints,
+        salesContext?.tenantId ?? 0,
+      );
 
       if (matches.length === 0) {
         return {
@@ -720,7 +730,13 @@ export class RagService {
       }
       if (!/(\?|admin|daftar|lanjut|hubung|jadwal|pilih)/i.test(answer)) {
         answer = `${answer}\n\n${this.buildSalesCTA(
-          salesContext || { leadStage: 'new', leadScore: 0, shouldOfferHandoff: false, detectedIntents },
+          salesContext || {
+            tenantId: 0,
+            leadStage: 'new',
+            leadScore: 0,
+            shouldOfferHandoff: false,
+            detectedIntents,
+          },
         )}`;
       }
 

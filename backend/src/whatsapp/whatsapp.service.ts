@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildTenantInstanceName } from '../common/tenant.util';
 
 type EvolutionConnectResult = {
   instanceName: string;
@@ -19,10 +20,6 @@ export class WhatsappService {
 
   private get apiKey() {
     return String(process.env.EVOLUTION_API_KEY || '');
-  }
-
-  private get instanceName() {
-    return String(process.env.EVOLUTION_INSTANCE_NAME || 'wa-rag-bot');
   }
 
   private get webhookUrl() {
@@ -55,14 +52,45 @@ export class WhatsappService {
     return json;
   }
 
-  private async configureWebhook() {
+  private async getTenantInstanceOrThrow(tenantId: number) {
+    let instance = await this.prisma.waInstance.findUnique({
+      where: { tenantId },
+      include: { tenant: true },
+    });
+
+    if (!instance) {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) {
+        throw new NotFoundException('Tenant tidak ditemukan');
+      }
+
+      instance = await this.prisma.waInstance.create({
+        data: {
+          tenantId,
+          instanceName: buildTenantInstanceName(tenant.slug),
+          status: 'not_created',
+        },
+        include: { tenant: true },
+      });
+    }
+
+    return instance;
+  }
+
+  private buildWebhookUrl(instanceName: string) {
+    const configured = this.webhookUrl;
+    const base = configured.replace(/\/webhooks\/evolution(?:\/[^/]+)?$/i, '');
+    return `${base}/webhooks/evolution/${encodeURIComponent(instanceName)}`;
+  }
+
+  private async configureWebhook(instanceName: string) {
     return this.requestJson(
-      `${this.baseUrl}/webhook/set/${encodeURIComponent(this.instanceName)}`,
+      `${this.baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`,
       {
         method: 'POST',
         headers: this.defaultHeaders,
         body: JSON.stringify({
-          url: this.webhookUrl,
+          url: this.buildWebhookUrl(instanceName),
           events: ['MESSAGES_UPSERT'],
           webhook_by_events: false,
           webhook_base64: false,
@@ -85,24 +113,29 @@ export class WhatsappService {
     return 'connecting';
   }
 
-  private async fetchConnectionState() {
+  private async fetchConnectionState(instanceName: string) {
     return this.requestJson(
-      `${this.baseUrl}/instance/connectionState/${encodeURIComponent(this.instanceName)}`,
+      `${this.baseUrl}/instance/connectionState/${encodeURIComponent(instanceName)}`,
       { method: 'GET', headers: { apikey: this.apiKey } },
     );
   }
 
-  private async persistInstance(update: {
-    phoneNumber?: string | null;
-    status: EvolutionConnectResult['status'] | 'not_created';
-    qrCodeBase64?: string | null;
-    lastError?: string | null;
-  }) {
+  private async persistInstance(
+    tenantId: number,
+    instanceName: string,
+    update: {
+      phoneNumber?: string | null;
+      status: EvolutionConnectResult['status'] | 'not_created';
+      qrCodeBase64?: string | null;
+      lastError?: string | null;
+    },
+  ) {
     const nowConnected = update.status === 'connected' ? new Date() : undefined;
 
     return this.prisma.waInstance.upsert({
-      where: { instanceName: this.instanceName },
+      where: { tenantId },
       update: {
+        instanceName,
         phoneNumber: update.phoneNumber ?? null,
         status: update.status,
         qrCodeBase64: update.qrCodeBase64 ?? null,
@@ -110,7 +143,8 @@ export class WhatsappService {
         lastConnectedAt: nowConnected,
       },
       create: {
-        instanceName: this.instanceName,
+        tenantId,
+        instanceName,
         phoneNumber: update.phoneNumber ?? null,
         status: update.status,
         qrCodeBase64: update.qrCodeBase64 ?? null,
@@ -120,13 +154,22 @@ export class WhatsappService {
     });
   }
 
-  async getInstance() {
+  async getInstance(tenantId: number) {
     return this.prisma.waInstance.findUnique({
-      where: { instanceName: this.instanceName },
+      where: { tenantId },
     });
   }
 
-  async connectInstance() {
+  async getInstanceByName(instanceName: string) {
+    return this.prisma.waInstance.findUnique({
+      where: { instanceName },
+      include: { tenant: true },
+    });
+  }
+
+  async connectInstance(tenantId: number) {
+    const instance = await this.getTenantInstanceOrThrow(tenantId);
+    const instanceName = instance.instanceName;
     let createError: string | null = null;
 
     try {
@@ -134,7 +177,7 @@ export class WhatsappService {
         method: 'POST',
         headers: this.defaultHeaders,
         body: JSON.stringify({
-          instanceName: this.instanceName,
+          instanceName,
           integration: 'WHATSAPP-BAILEYS',
           qrcode: true,
           token: '',
@@ -145,7 +188,7 @@ export class WhatsappService {
           readStatus: true,
           syncFullHistory: false,
           webhook: {
-            url: this.webhookUrl,
+            url: this.buildWebhookUrl(instanceName),
             byEvents: false,
             base64: false,
             events: ['MESSAGES_UPSERT'],
@@ -158,22 +201,23 @@ export class WhatsappService {
       }
     }
 
-    let payload: any = {};
     let status: EvolutionConnectResult['status'] = 'connecting';
     let qrCodeBase64: string | null = null;
     let phoneNumber: string | null = null;
     let lastError: string | null = createError;
 
     try {
-      payload = await this.requestJson(`${this.baseUrl}/instance/connect/${encodeURIComponent(this.instanceName)}`, {
-        method: 'GET',
-        headers: { apikey: this.apiKey },
-      });
+      const payload = await this.requestJson(
+        `${this.baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`,
+        {
+          method: 'GET',
+          headers: { apikey: this.apiKey },
+        },
+      );
 
       qrCodeBase64 = payload.base64 ?? payload.qrcode?.base64 ?? null;
 
-      const state = await this.fetchConnectionState();
-
+      const state = await this.fetchConnectionState(instanceName);
       const stateText = state.instance?.state ?? state.state ?? state.status ?? '';
 
       phoneNumber = String(state.instance?.number ?? state.number ?? '')
@@ -185,7 +229,7 @@ export class WhatsappService {
       }
 
       try {
-        await this.configureWebhook();
+        await this.configureWebhook(instanceName);
       } catch (error) {
         lastError = lastError
           ? `${lastError} | webhook: ${String(error)}`
@@ -196,7 +240,7 @@ export class WhatsappService {
       lastError = createError ? `${createError} | connect: ${String(error)}` : String(error);
     }
 
-    return this.persistInstance({
+    return this.persistInstance(tenantId, instanceName, {
       phoneNumber,
       status,
       qrCodeBase64,
@@ -204,28 +248,34 @@ export class WhatsappService {
     });
   }
 
-  async disconnectInstance() {
+  async disconnectInstance(tenantId: number) {
+    const instance = await this.getTenantInstanceOrThrow(tenantId);
     let lastError: string | null = null;
 
     try {
-      await this.requestJson(`${this.baseUrl}/instance/logout/${encodeURIComponent(this.instanceName)}`, {
-        method: 'DELETE',
-        headers: { apikey: this.apiKey },
-      });
+      await this.requestJson(
+        `${this.baseUrl}/instance/logout/${encodeURIComponent(instance.instanceName)}`,
+        {
+          method: 'DELETE',
+          headers: { apikey: this.apiKey },
+        },
+      );
     } catch (error) {
       lastError = String(error);
     }
 
-    return this.persistInstance({
+    return this.persistInstance(tenantId, instance.instanceName, {
       status: 'disconnected',
       qrCodeBase64: null,
       lastError,
     });
   }
 
-  async sendText(phone: string, text: string) {
-    const payload = await this.requestJson(
-      `${this.baseUrl}/message/sendText/${encodeURIComponent(this.instanceName)}`,
+  async sendText(tenantId: number, phone: string, text: string) {
+    const instance = await this.getTenantInstanceOrThrow(tenantId);
+
+    return this.requestJson(
+      `${this.baseUrl}/message/sendText/${encodeURIComponent(instance.instanceName)}`,
       {
         method: 'POST',
         headers: {
@@ -240,7 +290,5 @@ export class WhatsappService {
         }),
       },
     );
-
-    return payload;
   }
 }

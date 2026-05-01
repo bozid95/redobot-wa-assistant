@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '../common/auth.guard';
@@ -46,7 +46,38 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(AuthGuard)
-  me(@Req() request: { user: unknown }) {
-    return request.user;
+  async me(@Req() request: { user: { sub: number } }) {
+    return this.authService.getMe(request.user.sub);
+  }
+
+  @Patch('profile')
+  @UseGuards(AuthGuard)
+  async updateProfile(
+    @Req() request: { user: { sub: number } },
+    @Body() body: { name?: string },
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.updateProfile(request.user.sub, String(body.name || ''));
+    response.cookie('wa_rag_session', result.token, {
+      httpOnly: true,
+      sameSite: this.cookieSameSite,
+      secure: this.cookieSecure,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return result.user;
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthGuard)
+  async changePassword(
+    @Req() request: { user: { sub: number } },
+    @Body() body: { currentPassword?: string; newPassword?: string },
+  ) {
+    return this.authService.changePassword(
+      request.user.sub,
+      String(body.currentPassword || ''),
+      String(body.newPassword || ''),
+    );
   }
 }

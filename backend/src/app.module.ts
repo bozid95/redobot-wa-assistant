@@ -9,6 +9,9 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { RagModule } from './rag/rag.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { RolesGuard } from './common/roles.guard';
+import { TenantsModule } from './tenants/tenants.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     KnowledgeModule,
     RagModule,
     WebhooksModule,
+    TenantsModule,
+    UsersModule,
   ],
+  providers: [RolesGuard],
 })
 export class AppModule {}
