@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16
-    container_name: wa_rag_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -20,7 +19,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: wa_rag_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -28,27 +26,24 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: wa_rag_qdrant
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
 
   tika:
     image: apache/tika:3.2.3.0
-    container_name: wa_rag_tika
     restart: unless-stopped
 
   evolution-api:
     image: evoapicloud/evolution-api:latest
-    container_name: wa_rag_evolution_api
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-    ports:
-      - "7002:8080"
+    expose:
+      - "8080"
     volumes:
       - evolution_instances:/evolution/instances
     environment:
@@ -72,7 +67,6 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: wa_rag_backend
     restart: unless-stopped
     depends_on:
       postgres:
@@ -83,8 +77,8 @@ services:
         condition: service_started
       evolution-api:
         condition: service_started
-    ports:
-      - "7001:4000"
+    expose:
+      - "4000"
     volumes:
       - uploads_data:/app/uploads
       - knowledge_data:/app/knowledge
@@ -95,6 +89,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${APP_DB_NAME}
       JWT_SECRET: ${JWT_SECRET:-jwt-secret-change-me}
       COOKIE_SECRET: ${COOKIE_SECRET:-cookie-secret-change-me}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-dashboard-password}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
@@ -132,13 +128,12 @@ services:
       context: ./frontend-vue-tailadmin
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:4000}
-    container_name: wa_rag_frontend
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_started
-    ports:
-      - "7000:80"
+    expose:
+      - "80"
 
 volumes:
   postgres_data:
