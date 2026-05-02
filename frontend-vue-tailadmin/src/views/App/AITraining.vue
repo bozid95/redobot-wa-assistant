@@ -189,7 +189,7 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 class="text-base font-semibold text-gray-800 dark:text-white/90">Topik Sendiri</h4>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Tambahkan info lain sesuai kebutuhan bisnis, misalnya jam layanan, lokasi, pembayaran, kebijakan, promo, atau cabang.</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Tambahkan info lain sesuai kebutuhan bisnis, misalnya alur booking khusus, jam layanan, lokasi, pembayaran, kebijakan, promo, atau cabang.</p>
               </div>
               <Button variant="outline" size="sm" @click="addCustomKnowledge">Tambah Topik Sendiri</Button>
             </div>
@@ -742,9 +742,9 @@ const knowledgeSections = reactive([
   {
     key: 'booking',
     title: 'Cara Daftar atau Booking',
-    help: 'Alur pendaftaran, data yang perlu dikumpulkan, dan langkah berikutnya.',
+    help: 'Alur booking tiap bisnis. Isi bagian ini dipakai AI untuk menjawab pertanyaan daftar, booking, reservasi, atau jadwal.',
     content: '',
-    placeholder: 'Contoh:\n1. Pilih paket.\n2. Kirim nama, nomor WA, dan jadwal pilihan.\n3. Admin konfirmasi ketersediaan.\n4. Lakukan pembayaran DP jika diperlukan.',
+    placeholder: 'Contoh:\n1. Pilih paket yang diinginkan.\n2. Booking bisa lewat link website atau chat admin.\n3. Admin konfirmasi ketersediaan jadwal.\n4. Ikuti instruksi pembayaran bila diperlukan.',
     group: 'primary',
   },
 ]) as KnowledgeSection[]
@@ -1030,6 +1030,88 @@ function buildSystemPrompt() {
   ].join(' ')
 }
 
+function ensureKnowledgeBookingFlow(flow: AssistantFlowDraft) {
+  const bookingActionKey = 'answer_booking_from_knowledge'
+  let bookingAction = flow.actions.find((action) => action.key === bookingActionKey)
+
+  if (!bookingAction) {
+    bookingAction = {
+      id: 'action-answer-booking-from-knowledge',
+      key: bookingActionKey,
+      type: 'answer_from_knowledge',
+      label: 'Answer Booking from Knowledge',
+      messageTemplate: formatForm.answerPrefix.trim(),
+      fieldKeys: [],
+    }
+    flow.actions.push(bookingAction)
+  }
+
+  bookingAction.type = 'answer_from_knowledge'
+  bookingAction.label = bookingAction.label || 'Answer Booking from Knowledge'
+  bookingAction.messageTemplate = formatForm.answerPrefix.trim()
+  bookingAction.fieldKeys = []
+
+  let bookingIntent = flow.intents.find((intent) => intent.key === 'booking')
+  if (!bookingIntent) {
+    bookingIntent = {
+      id: 'intent-booking',
+      key: 'booking',
+      label: 'Booking Request',
+      keywords: [],
+      searchHints: [],
+      defaultAction: bookingActionKey,
+    }
+    flow.intents.push(bookingIntent)
+  }
+
+  if (bookingIntent) {
+    bookingIntent.defaultAction = bookingActionKey
+    bookingIntent.keywords = Array.from(new Set([...bookingIntent.keywords, 'booking', 'daftar', 'reservasi', 'jadwal']))
+    bookingIntent.searchHints = Array.from(
+      new Set([
+        ...bookingIntent.searchHints,
+        'cara daftar',
+        'cara booking',
+        'alur pendaftaran',
+        'alur booking',
+        'syarat booking',
+        'jadwal tersedia',
+      ]),
+    )
+  }
+
+  const bookingRule = flow.routingRules.find((rule) => rule.intentKey === 'booking')
+  if (bookingRule) {
+    bookingRule.actionKey = bookingActionKey
+    bookingRule.ifMissingFields = []
+  } else {
+    flow.routingRules.push({
+      id: 'rule-booking-knowledge',
+      intentKey: 'booking',
+      actionKey: bookingActionKey,
+      ifMissingFields: [],
+      ifConfidenceBelow: null,
+    })
+  }
+}
+
+function ensureKnowledgePricingFlow(flow: AssistantFlowDraft) {
+  const pricingIntent = flow.intents.find((intent) => intent.key === 'pricing')
+  if (!pricingIntent) return
+
+  pricingIntent.keywords = Array.from(new Set([...pricingIntent.keywords, 'harga', 'biaya', 'tarif', 'paket']))
+  pricingIntent.searchHints = Array.from(
+    new Set([
+      ...pricingIntent.searchHints,
+      'harga layanan',
+      'biaya paket',
+      'daftar paket',
+      'pilihan paket',
+      'promo',
+    ]),
+  )
+}
+
 function buildUpdatedFlow() {
   const flow = currentFlow.value ? deepClone(currentFlow.value) : null
   if (!flow) return null
@@ -1058,6 +1140,9 @@ function buildUpdatedFlow() {
   if (answerAction) {
     answerAction.messageTemplate = formatForm.answerPrefix.trim()
   }
+
+  ensureKnowledgeBookingFlow(flow)
+  ensureKnowledgePricingFlow(flow)
 
   return flow
 }

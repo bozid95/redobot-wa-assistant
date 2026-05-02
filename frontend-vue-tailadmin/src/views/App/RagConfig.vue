@@ -817,8 +817,8 @@ function createSeedDraft(): AssistantFlowDraft {
         id: createId('intent'),
         key: 'pricing',
         label: 'Pricing Inquiry',
-        keywords: ['harga', 'biaya', 'tarif'],
-        searchHints: ['harga layanan', 'biaya paket', 'promo'],
+        keywords: ['harga', 'biaya', 'tarif', 'paket'],
+        searchHints: ['harga layanan', 'biaya paket', 'daftar paket', 'pilihan paket', 'promo'],
         defaultAction: 'answer_pricing',
       },
       {
@@ -826,8 +826,8 @@ function createSeedDraft(): AssistantFlowDraft {
         key: 'booking',
         label: 'Booking Request',
         keywords: ['booking', 'reservasi', 'jadwal', 'daftar'],
-        searchHints: ['cara booking', 'jadwal tersedia', 'alur reservasi'],
-        defaultAction: 'collect_booking',
+        searchHints: ['cara daftar', 'cara booking', 'alur pendaftaran', 'alur booking', 'syarat booking', 'jadwal tersedia', 'alur reservasi'],
+        defaultAction: 'answer_booking_from_knowledge',
       },
       {
         id: createId('intent'),
@@ -846,6 +846,7 @@ function createSeedDraft(): AssistantFlowDraft {
     ],
     actions: [
       { id: createId('action'), key: 'answer_pricing', type: 'answer_from_knowledge', label: 'Answer Pricing from Knowledge', messageTemplate: 'Saya bantu cek informasi harga dari knowledge yang aktif ya kak.' },
+      { id: createId('action'), key: 'answer_booking_from_knowledge', type: 'answer_from_knowledge', label: 'Answer Booking from Knowledge', messageTemplate: 'Saya bantu cek alur booking dari knowledge yang aktif ya kak.' },
       { id: createId('action'), key: 'collect_booking', type: 'collect_fields', label: 'Collect Booking Data', messageTemplate: 'Siap kak, sebelum lanjut booking saya bantu catat dulu beberapa data penting.', fieldKeys: ['full_name', 'phone', 'preferred_date'] },
       { id: createId('action'), key: 'handoff_admin_now', type: 'handoff_admin', label: 'Handoff to Admin', messageTemplate: 'Baik kak, saya bantu arahkan ke admin agar bisa lanjut ditangani langsung.' },
       { id: createId('action'), key: 'send_payment_guide', type: 'send_payment_info', label: 'Send Payment Guide', messageTemplate: 'Saya bantu kirim arahan pembayaran yang berlaku ya kak.' },
@@ -853,7 +854,7 @@ function createSeedDraft(): AssistantFlowDraft {
     ],
     routingRules: [
       { id: createId('rule'), intentKey: 'pricing', actionKey: 'answer_pricing', ifConfidenceBelow: 0.45 },
-      { id: createId('rule'), intentKey: 'booking', actionKey: 'collect_booking', ifMissingFields: ['full_name', 'phone'] },
+      { id: createId('rule'), intentKey: 'booking', actionKey: 'answer_booking_from_knowledge', ifMissingFields: [] },
       { id: createId('rule'), intentKey: 'contact_admin', actionKey: 'handoff_admin_now' },
     ],
     advanced: {

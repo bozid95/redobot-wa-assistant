@@ -174,8 +174,8 @@ export function createDefaultAssistantFlowDraft(config: Partial<RagConfigValues>
         id: 'intent-pricing',
         key: 'pricing',
         label: 'Pricing Inquiry',
-        keywords: ['harga', 'biaya', 'tarif'],
-        searchHints: ['harga layanan', 'biaya paket', 'promo'],
+        keywords: ['harga', 'biaya', 'tarif', 'paket'],
+        searchHints: ['harga layanan', 'biaya paket', 'daftar paket', 'pilihan paket', 'promo'],
         defaultAction: 'answer_pricing',
       },
       {
@@ -183,8 +183,16 @@ export function createDefaultAssistantFlowDraft(config: Partial<RagConfigValues>
         key: 'booking',
         label: 'Booking Request',
         keywords: ['booking', 'reservasi', 'jadwal', 'daftar'],
-        searchHints: ['cara booking', 'jadwal tersedia', 'alur reservasi'],
-        defaultAction: 'collect_booking',
+        searchHints: [
+          'cara daftar',
+          'cara booking',
+          'alur pendaftaran',
+          'alur booking',
+          'syarat booking',
+          'jadwal tersedia',
+          'alur reservasi',
+        ],
+        defaultAction: 'answer_booking_from_knowledge',
       },
       {
         id: 'intent-contact-admin',
@@ -243,6 +251,13 @@ export function createDefaultAssistantFlowDraft(config: Partial<RagConfigValues>
         messageTemplate: 'Saya bantu cek informasi harga dari knowledge yang aktif ya kak.',
       },
       {
+        id: 'action-answer-booking-from-knowledge',
+        key: 'answer_booking_from_knowledge',
+        type: 'answer_from_knowledge',
+        label: 'Answer Booking from Knowledge',
+        messageTemplate: 'Saya bantu cek alur booking dari knowledge yang aktif ya kak.',
+      },
+      {
         id: 'action-collect-booking',
         key: 'collect_booking',
         type: 'collect_fields',
@@ -282,8 +297,8 @@ export function createDefaultAssistantFlowDraft(config: Partial<RagConfigValues>
       {
         id: 'rule-booking',
         intentKey: 'booking',
-        actionKey: 'collect_booking',
-        ifMissingFields: ['full_name', 'phone'],
+        actionKey: 'answer_booking_from_knowledge',
+        ifMissingFields: [],
       },
       {
         id: 'rule-contact-admin',

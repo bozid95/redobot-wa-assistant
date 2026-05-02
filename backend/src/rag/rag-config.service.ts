@@ -392,7 +392,7 @@ export class RagConfigService {
       config,
       defaults: getDefaultRagConfig(),
       updatedAt: record?.updatedAt?.toISOString() ?? null,
-      hasCustomConfig: this.hasLegacyOverrides(record),
+      hasCustomConfig: this.hasConfigOverrides(record),
       assistantFlow: resolvedFlow.assistantFlow,
       assistantFlowExample: resolvedFlow.assistantFlowExample,
       assistantFlowPersisted: resolvedFlow.assistantFlowPersisted,
@@ -402,7 +402,7 @@ export class RagConfigService {
     }
   }
 
-  private hasLegacyOverrides(record: RagConfigRecord | null) {
+  private hasConfigOverrides(record: RagConfigRecord | null) {
     if (!record) return false
 
     return [

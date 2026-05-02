@@ -81,9 +81,9 @@ const defaultKnowledgeSections: Array<{
   {
     key: 'booking',
     title: 'Cara Daftar atau Booking',
-    help: 'Alur pendaftaran, data yang perlu dikumpulkan, dan langkah berikutnya.',
+    help: 'Alur booking tiap bisnis. Isi bagian ini akan dipakai AI untuk menjawab pertanyaan daftar, booking, reservasi, atau jadwal.',
     placeholder:
-      'Contoh:\n1. Pilih paket.\n2. Kirim nama, nomor WA, dan jadwal pilihan.\n3. Admin konfirmasi ketersediaan.\n4. Lakukan pembayaran DP jika diperlukan.',
+      'Contoh:\n1. Pilih paket yang diinginkan.\n2. Booking bisa lewat link website atau chat admin.\n3. Admin konfirmasi ketersediaan jadwal.\n4. Ikuti instruksi pembayaran bila diperlukan.',
     group: 'primary',
   },
 ];
@@ -250,6 +250,92 @@ export class AiTrainingController {
     ].join(' ');
   }
 
+  private ensureKnowledgeBookingFlow(flow: AssistantFlowDraft, format?: TrainingFormat) {
+    const bookingActionKey = 'answer_booking_from_knowledge';
+    const answerPrefix = this.normalizeFormat(format).answerPrefix;
+
+    let bookingAction = flow.actions.find((action) => action.key === bookingActionKey);
+    if (!bookingAction) {
+      bookingAction = {
+        id: 'action-answer-booking-from-knowledge',
+        key: bookingActionKey,
+        type: 'answer_from_knowledge',
+        label: 'Answer Booking from Knowledge',
+        messageTemplate: answerPrefix,
+      };
+      flow.actions.push(bookingAction);
+    }
+
+    bookingAction.type = 'answer_from_knowledge';
+    bookingAction.label = bookingAction.label || 'Answer Booking from Knowledge';
+    bookingAction.messageTemplate = answerPrefix;
+    bookingAction.fieldKeys = [];
+
+    let bookingIntent = flow.intents.find((intent) => intent.key === 'booking');
+    if (!bookingIntent) {
+      bookingIntent = {
+        id: 'intent-booking',
+        key: 'booking',
+        label: 'Booking Request',
+        keywords: [],
+        searchHints: [],
+        defaultAction: bookingActionKey,
+      };
+      flow.intents.push(bookingIntent);
+    }
+
+    if (bookingIntent) {
+      bookingIntent.defaultAction = bookingActionKey;
+      bookingIntent.keywords = Array.from(
+        new Set([...bookingIntent.keywords, 'booking', 'daftar', 'reservasi', 'jadwal']),
+      );
+      bookingIntent.searchHints = Array.from(
+        new Set([
+          ...bookingIntent.searchHints,
+          'cara daftar',
+          'cara booking',
+          'alur pendaftaran',
+          'alur booking',
+          'syarat booking',
+          'jadwal tersedia',
+        ]),
+      );
+    }
+
+    const bookingRule = flow.routingRules.find((rule) => rule.intentKey === 'booking');
+    if (bookingRule) {
+      bookingRule.actionKey = bookingActionKey;
+      bookingRule.ifMissingFields = [];
+    } else {
+      flow.routingRules.push({
+        id: 'rule-booking-knowledge',
+        intentKey: 'booking',
+        actionKey: bookingActionKey,
+        ifMissingFields: [],
+        ifConfidenceBelow: null,
+      });
+    }
+  }
+
+  private ensureKnowledgePricingFlow(flow: AssistantFlowDraft) {
+    const pricingIntent = flow.intents.find((intent) => intent.key === 'pricing');
+    if (!pricingIntent) return;
+
+    pricingIntent.keywords = Array.from(
+      new Set([...pricingIntent.keywords, 'harga', 'biaya', 'tarif', 'paket']),
+    );
+    pricingIntent.searchHints = Array.from(
+      new Set([
+        ...pricingIntent.searchHints,
+        'harga layanan',
+        'biaya paket',
+        'daftar paket',
+        'pilihan paket',
+        'promo',
+      ]),
+    );
+  }
+
   private buildFlow(flow: AssistantFlowDraft, profile: TrainingProfile, format?: TrainingFormat) {
     const nextFlow = JSON.parse(JSON.stringify(flow)) as AssistantFlowDraft;
     nextFlow.profile.assistantName = this.sanitizeString(profile.assistantName) || 'Admin AI';
@@ -275,6 +361,9 @@ export class AiTrainingController {
     if (answerAction) {
       answerAction.messageTemplate = this.normalizeFormat(format).answerPrefix;
     }
+
+    this.ensureKnowledgeBookingFlow(nextFlow, format);
+    this.ensureKnowledgePricingFlow(nextFlow);
 
     return nextFlow;
   }

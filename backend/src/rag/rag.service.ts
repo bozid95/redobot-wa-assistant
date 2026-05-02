@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import {
   AssistantFlowDraft,
   AssistantFlowFieldType,
-  AssistantFlowSource,
   createDefaultAssistantFlowDraft,
   getDefaultRagConfig,
   RagConfigInput,
@@ -46,20 +45,9 @@ type SalesContext = {
   knownPhone?: string | null;
 };
 
-type CollectedLeadData = {
-  name?: string | null;
-  phone?: string | null;
-  vehicleType?: 'manual' | 'matic' | null;
-  packageName?: string | null;
-  schedule?: string | null;
-  domicile?: string | null;
-};
-
 type RuntimeConfig = {
   config: RagConfigValues;
   assistantFlow: AssistantFlowDraft;
-  assistantFlowPersisted: boolean;
-  assistantFlowSource: AssistantFlowSource;
 };
 
 type FlowIntent = AssistantFlowDraft['intents'][number];
@@ -97,14 +85,6 @@ export class RagService {
   private readonly thanksPatterns = [/^(terima kasih|makasih|thanks|thx)\b/i];
   private readonly shortAmbiguousPatterns = [/^(bisa|mau tanya|tanya|info|permisi|tes|halo admin)\b/i];
   private readonly shortFollowupPatterns = [/^(ya|iya|iyaa|yaa|yap|yes|oke|ok|lanjut|boleh|mau|gimana|bagaimana)\b/i];
-  private readonly legacyIntentPatterns: Record<string, RegExp[]> = {
-    price: [/\b(harga|biaya|tarif|ongkos|bayar|dp|pembayaran)\b/i],
-    requirement: [/\b(syarat|persyaratan|dokumen|berkas|ktp|minimal umur|usia)\b/i],
-    schedule: [/\b(jadwal|jam|hari|buka|operasional|weekend|sabtu|minggu)\b/i],
-    location: [/\b(alamat|lokasi|maps|map|tempat|kantor)\b/i],
-    registration: [/\b(daftar|pendaftaran|registrasi|cara daftar|alur)\b/i],
-    contact: [/\b(kontak|nomor|admin|cs|wa|whatsapp|telepon)\b/i],
-  };
 
   private get llmBaseUrl() {
     return String(process.env.LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -137,8 +117,6 @@ export class RagService {
       return {
         config: response.config,
         assistantFlow: response.assistantFlow,
-        assistantFlowPersisted: response.assistantFlowPersisted,
-        assistantFlowSource: response.assistantFlowSource,
       };
     }
 
@@ -150,8 +128,6 @@ export class RagService {
     return {
       config,
       assistantFlow: createDefaultAssistantFlowDraft(config),
-      assistantFlowPersisted: false,
-      assistantFlowSource: 'default',
     };
   }
 
@@ -204,34 +180,28 @@ export class RagService {
     return !remainder;
   }
 
-  private detectLegacyIntents(text: string) {
-    return (Object.entries(this.legacyIntentPatterns) as Array<[string, RegExp[]]>)
-      .filter(([, patterns]) => patterns.some((pattern) => pattern.test(text)))
-      .map(([intent]) => intent);
-  }
-
-  private buildLegacyIntentHints(intents: string[]) {
-    const labels: Record<string, string> = {
-      price: 'harga biaya tarif pembayaran',
-      requirement: 'syarat persyaratan dokumen berkas usia',
-      schedule: 'jadwal jam operasional hari layanan',
-      location: 'alamat lokasi kantor maps',
-      registration: 'pendaftaran cara daftar alur registrasi',
-      contact: 'kontak admin nomor whatsapp telepon',
-    };
-
-    return intents.map((intent) => labels[intent]).filter(Boolean).join('\n');
-  }
-
   private detectFlowIntents(text: string, flow: AssistantFlowDraft) {
     const lower = text.toLowerCase();
     return flow.intents
-      .map((intent) => ({
-        key: intent.key,
-        score: intent.keywords.reduce((count, keyword) => {
-          return lower.includes(keyword.toLowerCase()) ? count + 1 : count;
-        }, 0),
-      }))
+      .map((intent) => {
+        let score = intent.keywords.reduce((count, keyword) => {
+          const normalizedKeyword = keyword.trim().toLowerCase();
+          return normalizedKeyword && lower.includes(normalizedKeyword) ? count + 1 : count;
+        }, 0);
+
+        if (intent.key === 'pricing' && /\b(harga|biaya|tarif|paket|promo)\b/i.test(lower)) {
+          score += 2;
+        }
+
+        if (intent.key === 'booking' && /\b(daftar|booking|reservasi)\s+paket/i.test(lower)) {
+          score = Math.max(0, score - 1);
+        }
+
+        return {
+          key: intent.key,
+          score,
+        };
+      })
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((item) => item.key);
@@ -461,32 +431,8 @@ export class RagService {
     return config.fallbackMessage;
   }
 
-  private buildSalesCTA(context: SalesContext, config: RagConfigValues) {
-    if (context.shouldOfferHandoff || context.leadStage === 'handoff') {
-      return config.salesCtaHandoff;
-    }
-
-    if (context.leadStage === 'hot') {
-      return config.salesCtaHot;
-    }
-
-    if (context.leadStage === 'interested') {
-      return config.salesCtaInterested;
-    }
-
-    return config.salesCtaNew;
-  }
-
-  private buildLegacyMainMenu(config: RagConfigValues) {
-    return config.greetingMessage;
-  }
-
   private buildFlowMainMenu(flow: AssistantFlowDraft, config: RagConfigValues) {
     return flow.profile.greetingMessage || config.greetingMessage;
-  }
-
-  private resolveLegacyMenuSelection(_question: string): MenuSelection | null {
-    return null;
   }
 
   private resolveFlowMenuSelection(_question: string, _flow: AssistantFlowDraft): MenuSelection | null {
@@ -720,450 +666,6 @@ export class RagService {
       score: Number(match.score.toFixed(2)),
       snippet: match.text.slice(0, 220),
     }));
-  }
-
-  private extractLegacyCollectedLeadData(question: string, history: ConversationTurn[]): CollectedLeadData {
-    const currentText = question.trim();
-    const fullUserText = history
-      .filter((turn) => turn.role === 'user')
-      .map((turn) => turn.message.trim())
-      .concat(currentText)
-      .join('\n');
-
-    const currentLines = currentText
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const phoneMatch =
-      currentText.match(/(?:\+?62|0)\d{8,15}/) || fullUserText.match(/(?:\+?62|0)\d{8,15}/);
-    const schedulePattern =
-      /\b(?:jadwal(?:\s+mulai)?\s*[:\-]?\s*)?((?:minggu|senin|selasa|rabu|kamis|jumat|sabtu)?\s*,?\s*\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4})\b/i;
-    const scheduleMatch = currentText.match(schedulePattern) || fullUserText.match(schedulePattern);
-    const packageMatch =
-      currentText.match(/\bpaket\s+(intensif|dasar|kilat)\b/i) ||
-      fullUserText.match(/\bpaket\s+(intensif|dasar|kilat)\b/i);
-
-    const explicitName =
-      this.extractLabeledValue(currentText, ['nama lengkap', 'nama']) ||
-      this.extractLabeledValue(fullUserText, ['nama lengkap', 'nama']);
-    const explicitDomicile =
-      this.extractLabeledValue(currentText, ['domisili', 'alamat']) ||
-      this.extractLabeledValue(fullUserText, ['domisili', 'alamat']);
-    const hasStructuredSignal =
-      currentLines.length >= 2 ||
-      Boolean(
-        explicitName ||
-          explicitDomicile ||
-          phoneMatch?.[0] ||
-          scheduleMatch?.[1] ||
-          /(domisili|nama|jadwal|alamat)/i.test(currentText),
-      );
-
-    let name: string | null = explicitName;
-    for (const line of hasStructuredSignal && !name ? currentLines.slice(-6) : []) {
-      if (/\d/.test(line)) continue;
-      if (line.length < 3 || line.length > 40) continue;
-      if (!/^[A-Za-z'`.\- ]+$/.test(line)) continue;
-      if (/^(iya|ya|oke|ok|siap|halo|haloo|hai|hi|manual|matic|intensif|dasar|kilat)$/i.test(line)) continue;
-      name = line;
-    }
-
-    const lowerText = `${currentText}\n${fullUserText}`.toLowerCase();
-    const vehicleType = /\bmanual\b/.test(lowerText)
-      ? 'manual'
-      : /\bmatic\b/.test(lowerText)
-        ? 'matic'
-        : null;
-    let domicile: string | null = explicitDomicile;
-    for (const line of hasStructuredSignal && !domicile ? currentLines.slice(-6) : []) {
-      if (/\d/.test(line)) continue;
-      if (line.length < 3 || line.length > 50) continue;
-      if (!/^[A-Za-z'`.\- ]+$/.test(line)) continue;
-      if (name && line.toLowerCase() === name.toLowerCase()) continue;
-      if (/^(iya|ya|oke|ok|siap|halo|haloo|hai|hi|manual|matic|intensif|dasar|kilat|kebetulan|bebas)$/i.test(line)) continue;
-      if (/(senin|selasa|rabu|kamis|jumat|sabtu|minggu|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)/i.test(line)) continue;
-      domicile = line;
-    }
-
-    return {
-      name,
-      phone: phoneMatch?.[0] || null,
-      vehicleType,
-      packageName: packageMatch ? `paket ${packageMatch[1].toLowerCase()}` : null,
-      schedule: scheduleMatch?.[1] || scheduleMatch?.[0] || null,
-      domicile,
-    };
-  }
-
-  private hasMinimumHandoffData(data: CollectedLeadData, salesContext?: SalesContext) {
-    return Boolean(data.name && (salesContext?.knownPhone || data.phone) && data.schedule);
-  }
-
-  private async buildHandoffReply(data: CollectedLeadData, salesContext: SalesContext | undefined, config: RagConfigValues) {
-    const paymentInstructions = await this.buildPaymentInstructions(salesContext?.tenantId ?? 0, config);
-    const pieces = [
-      'Siap kak, data kakak sudah saya catat.',
-      data.name ? `Nama: ${data.name}.` : null,
-      (salesContext?.knownPhone || data.phone) ? `No. WhatsApp: ${salesContext?.knownPhone || data.phone}.` : null,
-      data.domicile ? `Domisili: ${data.domicile}.` : null,
-      data.schedule ? `Jadwal yang diajukan: ${data.schedule}.` : null,
-      data.packageName ? `Paket: ${data.packageName}.` : null,
-      data.vehicleType ? `Pilihan mobil: ${data.vehicleType}.` : null,
-      paymentInstructions,
-      'Setelah transfer, kirim bukti bayar di chat ini ya kak. Setelah itu data akan saya simpan dan admin lanjut konfirmasi.',
-    ].filter(Boolean);
-
-    return pieces.join(' ');
-  }
-
-  private isAskingForPaymentAccount(question: string) {
-    return /\b(rekening|nomor rekening|no rekening|no rek|nomor rek|transfer ke mana|bank mana|kirim ke mana|pembayaran ke mana)\b/i.test(
-      question,
-    );
-  }
-
-  private looksLikeLeadDataSubmission(question: string, data: CollectedLeadData) {
-    const trimmedQuestion = question.trim();
-    const lineCount = trimmedQuestion
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean).length;
-
-    const hasExplicitLabels = /(nama|domisili|alamat|jadwal)\s*[:\-]/i.test(trimmedQuestion);
-    const hasPhone = /(?:\+?62|0)\d{8,15}/.test(trimmedQuestion);
-    const hasSchedule =
-      /\b\d{1,2}\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}\b/i.test(
-        trimmedQuestion,
-      );
-    const dataPoints = [data.name, data.phone, data.domicile, data.schedule].filter(Boolean).length;
-    if (this.isAskingForPaymentAccount(trimmedQuestion)) {
-      return false;
-    }
-
-    return hasExplicitLabels || ((hasPhone || hasSchedule) && lineCount >= 2 && dataPoints >= 2);
-  }
-
-  private buildMissingDataReply(data: CollectedLeadData, salesContext?: SalesContext) {
-    const missing: string[] = [];
-    if (!data.name) missing.push('nama lengkap');
-    if (!data.domicile) missing.push('domisili');
-    if (!data.schedule) missing.push('jadwal yang diinginkan');
-
-    const knownParts = [
-      'Siap kak, sebagian data sudah saya catat.',
-      data.name ? `Nama: ${data.name}.` : null,
-      (salesContext?.knownPhone || data.phone) ? `No. WhatsApp: ${salesContext?.knownPhone || data.phone}.` : null,
-      data.domicile ? `Domisili: ${data.domicile}.` : null,
-      data.schedule ? `Jadwal: ${data.schedule}.` : null,
-      missing.length
-        ? `Yang masih perlu dilengkapi: ${missing.join(', ')} ya kak.`
-        : null,
-    ].filter(Boolean);
-
-    return knownParts.join(' ');
-  }
-
-  private async runLegacyRag(
-    question: string,
-    normalizedText: string,
-    history: ConversationTurn[],
-    salesContext: SalesContext | undefined,
-    config: RagConfigValues,
-  ): Promise<{ result: RagResult; debug: RagDebugResult }> {
-    const tenantId = salesContext?.tenantId ?? 0;
-    const menuSelection = this.resolveLegacyMenuSelection(question);
-    const effectiveQuestion = menuSelection?.rewrittenQuestion || question;
-    const effectiveNormalizedText = effectiveQuestion.replace(/\s+/g, ' ').toLowerCase();
-    const detectedIntents = salesContext?.detectedIntents?.length
-      ? salesContext.detectedIntents
-      : this.detectLegacyIntents(`${effectiveQuestion}\n${history.map((turn) => turn.message).join('\n')}`);
-    const collectedLeadData = this.extractLegacyCollectedLeadData(effectiveQuestion, history);
-
-    if (
-      salesContext &&
-      (salesContext.leadStage === 'hot' || salesContext.leadStage === 'handoff') &&
-      this.isAskingForPaymentAccount(question)
-    ) {
-      const reply = await this.buildPaymentInstructions(salesContext.tenantId, config);
-      return {
-        result: {
-          action: 'answer',
-          reply,
-          source: 'rag',
-          metadata: {
-            source: 'rag',
-            payment_requested: true,
-          },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
-
-    if (
-      salesContext &&
-      (salesContext.leadStage === 'hot' || salesContext.leadStage === 'handoff') &&
-      this.hasMinimumHandoffData(collectedLeadData, salesContext)
-    ) {
-      const reply = await this.buildHandoffReply(collectedLeadData, salesContext, config);
-      return {
-        result: {
-          action: 'answer',
-          reply,
-          source: 'rag',
-          metadata: {
-            source: 'rag',
-            handoff_ready: true,
-            payment_requested: true,
-            collected_lead_data: collectedLeadData,
-          },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
-
-    if (
-      salesContext &&
-      (salesContext.leadStage === 'hot' || salesContext.leadStage === 'handoff') &&
-      this.looksLikeLeadDataSubmission(question, collectedLeadData)
-    ) {
-      const reply = this.buildMissingDataReply(collectedLeadData, salesContext);
-      return {
-        result: {
-          action: 'answer',
-          reply,
-          source: 'rag',
-          metadata: {
-            source: 'rag',
-            collected_lead_data: collectedLeadData,
-            handoff_partial: true,
-          },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
-
-    if (this.isGreetingOnly(normalizedText)) {
-      const reply = this.buildLegacyMainMenu(config);
-      return {
-        result: {
-          action: 'answer',
-          reply,
-          source: 'router_greeting',
-          metadata: { source: 'router_greeting' },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
-
-    if (this.thanksPatterns.some((pattern) => pattern.test(normalizedText))) {
-      const reply = `${config.thanksMessage}\n\n${this.buildLegacyMainMenu(config)}`;
-      return {
-        result: {
-          action: 'answer',
-          reply,
-          source: 'router_thanks',
-          metadata: { source: 'router_thanks' },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
-
-    if (
-      effectiveQuestion.split(/\s+/).filter(Boolean).length <= 4 &&
-      this.shortAmbiguousPatterns.some((pattern) => pattern.test(effectiveNormalizedText)) &&
-      detectedIntents.length === 0
-    ) {
-      const reply = `${config.clarifyMessage}\n\n${this.buildLegacyMainMenu(config)}`;
-      return {
-        result: {
-          action: 'answer',
-          reply,
-          source: 'router_clarify',
-          metadata: { source: 'router_clarify' },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
-
-    try {
-      const historySnippet = this.buildHistorySnippet(history, config);
-      const searchQuery = this.buildSearchQuery(effectiveQuestion, effectiveNormalizedText, history);
-      const queryWithHints = detectedIntents.length
-        ? `${searchQuery}\n${this.buildLegacyIntentHints(detectedIntents)}`
-        : searchQuery;
-      const { rawResults, matches } = await this.retrieveKnowledge(
-        queryWithHints,
-        tenantId,
-        config,
-      );
-
-      if (matches.length === 0) {
-        const reply = this.buildSoftFallback(question, history, config);
-        return {
-          result: {
-            action: 'fallback',
-            reason: rawResults.length === 0 ? 'no_match' : 'low_confidence',
-            reply,
-            metadata: {
-              source: 'rag',
-              top_score: rawResults[0]?.score ?? null,
-              search_query: queryWithHints,
-            },
-          },
-          debug: {
-            detectedIntents,
-            searchQuery: queryWithHints,
-            topMatches: this.toDebugMatches(matches),
-            generatedAnswer: reply,
-          },
-        };
-      }
-
-      const context = matches
-        .map((match: RagMatch, index: number) => {
-          const sourceBits = [match.title];
-          if (match.page) {
-            sourceBits.push(`hal. ${match.page}`);
-          }
-          return `[Sumber ${index + 1}: ${sourceBits.join(' | ')}]\n${match.text}`;
-        })
-        .join('\n\n');
-
-      const answerRes = await fetch(`${this.llmBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.llmApiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.chatModel,
-          temperature: 0.2,
-          messages: [
-            {
-              role: 'system',
-              content: this.buildSystemInstructions(config),
-            },
-            {
-              role: 'user',
-              content: `Riwayat chat:\n${historySnippet || '-'}\n\nPertanyaan terbaru:\n${effectiveQuestion}\n\nLead stage: ${salesContext?.leadStage || 'new'}\nLead score: ${salesContext?.leadScore || 0}\nIntent terdeteksi: ${detectedIntents.join(', ') || '-'}\nPerlu tawarkan handoff admin: ${salesContext?.shouldOfferHandoff ? 'ya' : 'tidak'}\nData yang sudah terkumpul: ${JSON.stringify(collectedLeadData)}\n\nKonteks knowledge:\n${context}`,
-            },
-          ],
-        }),
-      });
-      const answerJson = await answerRes.json();
-      if (!answerRes.ok) {
-        throw new Error(`Chat completion failed: ${JSON.stringify(answerJson)}`);
-      }
-
-      let answer = String(answerJson.choices?.[0]?.message?.content || '').trim();
-      if (!answer || answer === '__NO_ANSWER__') {
-        const reply = this.buildSoftFallback(effectiveQuestion, history, config);
-        return {
-          result: {
-            action: 'fallback',
-            reason: 'low_confidence',
-            reply,
-            metadata: { source: 'rag', top_score: matches[0]?.score ?? null, search_query: queryWithHints },
-          },
-          debug: {
-            detectedIntents,
-            searchQuery: queryWithHints,
-            topMatches: this.toDebugMatches(matches),
-            generatedAnswer: reply,
-          },
-        };
-      }
-
-      answer = answer.replace(/\s{3,}/g, '\n\n').trim();
-      answer = answer.replace(/\*\*/g, '').replace(/\*/g, '');
-      answer = answer.replace(/\|/g, ' ');
-      answer = answer.replace(/\n?\s*Sumber\s*:[\s\S]*$/i, '').trim();
-      if (menuSelection?.reply) {
-        answer = `${menuSelection.reply}\n\n${answer}`;
-      }
-      if (!/(\?|admin|daftar|lanjut|hubung|jadwal|pilih)/i.test(answer)) {
-        answer = `${answer}\n\n${this.buildSalesCTA(
-          salesContext || {
-            tenantId: tenantId,
-            leadStage: 'new',
-            leadScore: 0,
-            shouldOfferHandoff: false,
-            detectedIntents,
-          },
-          config,
-        )}`;
-      }
-
-      return {
-        result: {
-          action: 'answer',
-          reply: answer,
-          source: 'rag',
-          metadata: {
-            source: 'rag',
-            top_score: matches[0]?.score ?? null,
-            search_query: queryWithHints,
-          },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: queryWithHints,
-          topMatches: this.toDebugMatches(matches),
-          generatedAnswer: answer,
-        },
-      };
-    } catch (error) {
-      const reply =
-        'Maaf kak, saya lagi terkendala saat mencari jawaban dari data yang ada. Coba kirim ulang pertanyaannya atau tulis sedikit lebih detail ya kak.';
-      return {
-        result: {
-          action: 'fallback',
-          reason: 'system_error',
-          reply,
-          metadata: {
-            source: 'rag',
-            error: String(error),
-          },
-        },
-        debug: {
-          detectedIntents,
-          searchQuery: '',
-          topMatches: [],
-          generatedAnswer: reply,
-        },
-      };
-    }
   }
 
   private async runAssistantFlowRag(
@@ -1440,23 +942,13 @@ export class RagService {
     const tenantId = salesContext?.tenantId ?? 0;
     const runtime = await this.loadRuntimeConfig(tenantId, configOverride);
 
-    if (runtime.assistantFlowSource !== 'default') {
-      return this.runAssistantFlowRag(
-        question,
-        normalizedText,
-        history,
-        salesContext,
-        runtime.config,
-        runtime.assistantFlow,
-      );
-    }
-
-    return this.runLegacyRag(
+    return this.runAssistantFlowRag(
       question,
       normalizedText,
       history,
       salesContext,
       runtime.config,
+      runtime.assistantFlow,
     );
   }
 
