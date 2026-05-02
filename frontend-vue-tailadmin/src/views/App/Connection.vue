@@ -25,9 +25,9 @@
           </div>
 
           <div class="mt-6 flex flex-wrap gap-3">
-            <Button :startIcon="RadioTower" :disabled="pending" @click="connect">{{ pending ? 'Menghubungkan...' : isConnected ? 'Reconnect' : 'Create / Connect' }}</Button>
-            <Button variant="outline" :disabled="pending || !canDisconnect" @click="disconnect">{{ pending ? 'Memutuskan...' : 'Disconnect' }}</Button>
-            <Button variant="outline" :startIcon="RefreshCw" :disabled="loading" @click="loadData">Refresh</Button>
+            <Button :startIcon="RadioTower" :loading="pending" @click="connect">{{ pending ? 'Menghubungkan...' : isConnected ? 'Reconnect' : 'Create / Connect' }}</Button>
+            <Button variant="outline" :loading="pending" :disabled="!canDisconnect" @click="disconnect">{{ pending ? 'Memutuskan...' : 'Disconnect' }}</Button>
+            <Button variant="outline" :startIcon="RefreshCw" :loading="loading" @click="loadData">Refresh</Button>
           </div>
         </div>
       </div>
@@ -51,6 +51,7 @@ import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type InstanceResponse = {
   instanceName?: string
@@ -67,11 +68,18 @@ type InstanceResponse = {
 const data = ref<InstanceResponse | null>(null)
 const loading = ref(false)
 const pending = ref(false)
+const toast = useToast()
 
 async function loadData() {
   loading.value = true
   try {
     data.value = await apiFetch<InstanceResponse>('/whatsapp/instance')
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal memuat koneksi WhatsApp',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     loading.value = false
   }
@@ -81,7 +89,14 @@ async function connect() {
   pending.value = true
   try {
     await apiFetch('/whatsapp/instance/connect', { method: 'POST' })
+    toast.notify({ kind: 'success', title: 'Koneksi WhatsApp sedang diproses' })
     await loadData()
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal menghubungkan WhatsApp',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     pending.value = false
   }
@@ -91,7 +106,14 @@ async function disconnect() {
   pending.value = true
   try {
     await apiFetch('/whatsapp/instance/disconnect', { method: 'POST' })
+    toast.notify({ kind: 'success', title: 'WhatsApp berhasil diputuskan' })
     await loadData()
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal memutus koneksi WhatsApp',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     pending.value = false
   }

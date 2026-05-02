@@ -16,7 +16,7 @@
               <router-link to="/users">
                 <Button size="sm" variant="outline" :startIcon="ArrowLeft">Back to list</Button>
               </router-link>
-              <Button size="sm" :startIcon="Save" :disabled="pending || !canSave" @click="saveUser">
+              <Button size="sm" :startIcon="Save" :loading="pending" :disabled="!canSave" @click="saveUser">
                 {{ pending ? 'Saving...' : editingId ? 'Update User' : 'Create User' }}
               </Button>
             </div>
@@ -44,8 +44,9 @@
           <div>
             <label class="form-label">Role</label>
             <select v-model="form.role" class="form-input">
-              <option value="user">user</option>
-              <option value="admin">admin</option>
+              <option value="tenant_staff">tenant_staff</option>
+              <option value="tenant_admin">tenant_admin</option>
+              <option value="platform_admin">platform_admin</option>
             </select>
           </div>
           <div>
@@ -89,7 +90,7 @@
         </div>
 
         <div class="mt-5 flex gap-3">
-          <Button size="sm" :disabled="resettingPassword || !canResetPassword" @click="resetPassword">
+          <Button size="sm" :loading="resettingPassword" :disabled="!canResetPassword" @click="resetPassword">
             {{ resettingPassword ? 'Saving...' : 'Save New Password' }}
           </Button>
         </div>
@@ -116,8 +117,9 @@
             size="sm"
             variant="outline"
             className="border-error-200 text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-300"
-            :disabled="deleting || !confirmDelete"
-            @click="deleteUser"
+            :loading="deleting"
+            :disabled="!confirmDelete"
+            @click="showDeleteConfirm = true"
           >
             {{ deleting ? 'Deleting...' : 'Delete User' }}
           </Button>
@@ -127,6 +129,16 @@
       <p v-if="errorMessage" class="text-sm text-error-600 dark:text-error-400">{{ errorMessage }}</p>
       <p v-if="successMessage" class="text-sm text-success-600 dark:text-success-400">{{ successMessage }}</p>
     </div>
+
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      title="Hapus user?"
+      message="User akan dihapus permanen dari sistem. Pastikan akun ini memang sudah tidak digunakan."
+      confirmText="Hapus User"
+      :loading="deleting"
+      @cancel="showDeleteConfirm = false"
+      @confirm="deleteUser"
+    />
   </admin-layout>
 </template>
 
@@ -137,7 +149,9 @@ import { ArrowLeft, Save } from 'lucide-vue-next'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type TenantOption = {
   id: number
@@ -145,17 +159,20 @@ type TenantOption = {
   slug?: string
 }
 
+type UserRole = 'platform_admin' | 'tenant_admin' | 'tenant_staff'
+
 type UserPayload = {
   id: number
   email: string
   name: string
-  role: 'admin' | 'user'
+  role: UserRole
   tenantId: number | null
   isActive: boolean
 }
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const editingId = computed(() => {
   const raw = route.params.id
   return raw ? Number(raw) : null
@@ -166,6 +183,7 @@ const pending = ref(false)
 const resettingPassword = ref(false)
 const deleting = ref(false)
 const confirmDelete = ref(false)
+const showDeleteConfirm = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 
@@ -173,7 +191,7 @@ const form = ref({
   name: '',
   email: '',
   password: '',
-  role: 'user' as 'admin' | 'user',
+  role: 'tenant_staff' as UserRole,
   tenantId: 0,
   isActive: true,
 })
@@ -233,6 +251,7 @@ async function bootstrap() {
     await loadUser()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Gagal memuat data user'
+    toast.notify({ kind: 'error', title: 'Gagal memuat user', message: errorMessage.value })
   }
 }
 
@@ -252,16 +271,19 @@ async function saveUser() {
         }),
       })
       successMessage.value = 'User berhasil diperbarui.'
+      toast.notify({ kind: 'success', title: 'User berhasil diperbarui' })
     } else {
       await apiFetch('/users', {
         method: 'POST',
         body: JSON.stringify(form.value),
       })
+      toast.notify({ kind: 'success', title: 'User berhasil dibuat', message: form.value.email })
       await router.push('/users')
       return
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Gagal menyimpan user'
+    toast.notify({ kind: 'error', title: 'Gagal menyimpan user', message: errorMessage.value })
   } finally {
     pending.value = false
   }
@@ -280,8 +302,10 @@ async function resetPassword() {
     })
     passwordForm.value = { password: '', confirmPassword: '' }
     successMessage.value = 'Password user berhasil direset.'
+    toast.notify({ kind: 'success', title: 'Password user berhasil direset' })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Gagal reset password'
+    toast.notify({ kind: 'error', title: 'Gagal reset password', message: errorMessage.value })
   } finally {
     resettingPassword.value = false
   }
@@ -297,9 +321,12 @@ async function deleteUser() {
     await apiFetch(`/users/${editingId.value}`, {
       method: 'DELETE',
     })
+    toast.notify({ kind: 'success', title: 'User berhasil dihapus' })
+    showDeleteConfirm.value = false
     await router.push('/users')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Gagal menghapus user'
+    toast.notify({ kind: 'error', title: 'Gagal menghapus user', message: errorMessage.value })
   } finally {
     deleting.value = false
   }

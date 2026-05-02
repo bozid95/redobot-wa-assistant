@@ -32,36 +32,40 @@
         </li>
       </ul>
 
-      <router-link
-        to="/login"
+      <button
+        type="button"
         class="group mt-3 flex items-center gap-3 rounded-lg px-3 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
         @click="signOut"
       >
         <LogoutIcon class="text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
         Sign out
-      </router-link>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { UserCircleIcon, ChevronDownIcon, LogoutIcon, SettingsIcon, InfoCircleIcon } from '@/icons'
 import { useAuth } from '@/composables/useAuth'
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref(null)
 const auth = useAuth()
+const router = useRouter()
 
 const menuItems = computed(() => {
   const items = [
     { href: '/profile', icon: UserCircleIcon, text: 'Profile' },
     { href: '/connection', icon: SettingsIcon, text: 'Connection' },
-    { href: '/knowledge', icon: InfoCircleIcon, text: 'Knowledge' },
   ]
 
-  if (auth.user.value?.role === 'admin') {
+  if (['platform_admin', 'tenant_admin'].includes(auth.user.value?.role || '')) {
+    items.push({ href: '/ai-training', icon: InfoCircleIcon, text: 'Latih AI' })
+  }
+
+  if (auth.user.value?.role === 'platform_admin') {
     items.unshift({ href: '/users', icon: UserCircleIcon, text: 'Users' })
   }
 
@@ -71,7 +75,7 @@ const menuItems = computed(() => {
 const displayName = computed(() => auth.user.value?.name || auth.user.value?.email || 'Admin')
 const displayEmail = computed(() => auth.user.value?.email || 'admin@example.com')
 const displayRoleTenant = computed(() => {
-  const role = auth.user.value?.role?.replace('_', ' ') || 'admin'
+  const role = auth.user.value?.role?.replace(/_/g, ' ') || 'tenant staff'
   const tenant = auth.user.value?.tenantName || 'Workspace default'
   return `${role} • ${tenant}`
 })
@@ -87,6 +91,7 @@ const closeDropdown = () => {
 const signOut = async () => {
   await auth.logout()
   closeDropdown()
+  await router.replace('/login')
 }
 
 const handleClickOutside = (event) => {

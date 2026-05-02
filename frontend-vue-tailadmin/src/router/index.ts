@@ -71,6 +71,16 @@ const router = createRouter({
       },
     },
     {
+      path: '/ai-training',
+      name: 'AI Training',
+      component: () => import('../views/App/AITraining.vue'),
+      meta: {
+        title: 'Latih AI',
+        requiresAuth: true,
+        requiresTenantAdmin: true,
+      },
+    },
+    {
       path: '/leads',
       name: 'Leads',
       component: () => import('../views/App/Leads.vue'),
@@ -208,7 +218,18 @@ router.beforeEach(async (to, from, next) => {
 
   if (to.meta.requiresAdmin) {
     await auth.fetchMe()
-    if (!auth.user.value || auth.user.value.role !== 'admin') {
+    if (!auth.user.value || auth.user.value.role !== 'platform_admin') {
+      next('/')
+      return
+    }
+  }
+
+  if (to.meta.requiresTenantAdmin) {
+    await auth.fetchMe()
+    if (
+      !auth.user.value ||
+      !['platform_admin', 'tenant_admin'].includes(auth.user.value.role)
+    ) {
       next('/')
       return
     }

@@ -111,6 +111,7 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type ActionType =
   | 'answer_from_knowledge'
@@ -190,6 +191,7 @@ type AssistantTemplateItem = {
 }
 
 const router = useRouter()
+const toast = useToast()
 const templates = ref<AssistantTemplateItem[]>([])
 const loading = ref(false)
 const message = ref('')
@@ -217,16 +219,19 @@ function formatUpdatedAt(value: string | null) {
   })
 }
 
-function setMessage(kind: 'success' | 'error' | 'info', value: string) {
+function setMessage(kind: 'success' | 'error' | 'info', value: string, showToast = true) {
   messageKind.value = kind
   message.value = value
+  if (showToast) {
+    toast.notify({ kind, title: value })
+  }
 }
 
 async function loadTemplates() {
   loading.value = true
   try {
     templates.value = await apiFetch<AssistantTemplateItem[]>('/rag-config/templates')
-    setMessage('info', 'Library template berhasil dimuat.')
+    setMessage('info', 'Library template berhasil dimuat.', false)
   } catch (error) {
     setMessage('error', error instanceof Error ? error.message : 'Gagal memuat template')
   } finally {

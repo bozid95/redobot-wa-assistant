@@ -9,14 +9,14 @@
             <div>
               <h3 class="font-semibold text-gray-800 dark:text-white/90">{{ editingId ? 'Edit tenant' : 'Create tenant' }}</h3>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ editingId ? 'Perbarui identitas tenant dan assignment AI template dari halaman ini.' : 'Buat tenant baru dengan flow yang lebih rapi, lalu pilih template assistant yang sesuai.' }}
+                {{ editingId ? 'Perbarui identitas tenant dan lanjutkan setup AI dari halaman ini.' : 'Buat tenant baru, lalu setup AI tenant melalui Latih AI.' }}
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
               <router-link to="/tenants">
                 <Button size="sm" variant="outline" :startIcon="ArrowLeft">Back to list</Button>
               </router-link>
-              <Button size="sm" :startIcon="Save" :disabled="pending || !canSave" @click="saveTenant">
+              <Button size="sm" :startIcon="Save" :loading="pending" :disabled="!canSave" @click="saveTenant">
                 {{ pending ? 'Saving...' : editingId ? 'Update Tenant' : 'Create Tenant' }}
               </Button>
             </div>
@@ -32,18 +32,6 @@
             <label class="form-label">Slug Preview</label>
             <div class="form-static">{{ slugPreview }}</div>
           </div>
-          <div class="lg:col-span-2">
-            <label class="form-label">AI Template</label>
-            <select v-model.number="form.templateId" class="form-input">
-              <option :value="0">Tanpa template</option>
-              <option v-for="template in templates" :key="template.id" :value="template.id">
-                {{ template.name }}
-              </option>
-            </select>
-            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Tenant akan mewarisi flow dari template ini. Override tenant bisa ditambahkan nanti jika memang dibutuhkan.
-            </p>
-          </div>
         </div>
       </section>
 
@@ -55,7 +43,7 @@
           <div>
             <h3 class="font-semibold text-gray-800 dark:text-white/90">Tenant Snapshot</h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Ringkasan ini membantu sebelum kamu mengubah assignment template atau menghapus tenant.
+              Ringkasan ini membantu sebelum kamu membuka Latih AI atau menghapus tenant.
             </p>
           </div>
         </div>
@@ -70,14 +58,14 @@
             <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ tenantStats.instances }}</p>
           </div>
           <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
-            <p class="text-xs uppercase tracking-wide text-gray-500">Assigned Template</p>
-            <p class="mt-2 text-sm font-semibold text-gray-800 dark:text-white/90">{{ selectedTemplateName }}</p>
+            <p class="text-xs uppercase tracking-wide text-gray-500">AI Setup</p>
+            <p class="mt-2 text-sm font-semibold text-gray-800 dark:text-white/90">Latih AI Tenant</p>
           </div>
         </div>
 
         <div class="mt-5 flex flex-wrap gap-3">
-          <Button variant="outline" :disabled="!form.templateId" @click="openSelectedTemplate">
-            Open Template
+          <Button @click="openTenantTraining">
+            Buka Latih AI Tenant
           </Button>
         </div>
       </section>
@@ -103,8 +91,9 @@
             size="sm"
             variant="outline"
             className="border-error-200 text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-300"
-            :disabled="deleting || !confirmDelete"
-            @click="deleteTenant"
+            :loading="deleting"
+            :disabled="!confirmDelete"
+            @click="showDeleteConfirm = true"
           >
             {{ deleting ? 'Deleting...' : 'Delete Tenant' }}
           </Button>
@@ -114,6 +103,16 @@
       <p v-if="errorMessage" class="text-sm text-error-600 dark:text-error-400">{{ errorMessage }}</p>
       <p v-if="successMessage" class="text-sm text-success-600 dark:text-success-400">{{ successMessage }}</p>
     </div>
+
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      title="Hapus tenant?"
+      message="Tenant akan dihapus permanen dan data terkait akan dilepas dari tenant ini. Aksi ini tidak bisa dibatalkan."
+      confirmText="Hapus Tenant"
+      :loading="deleting"
+      @cancel="showDeleteConfirm = false"
+      @confirm="deleteTenant"
+    />
   </admin-layout>
 </template>
 
@@ -124,16 +123,9 @@ import { ArrowLeft, Save } from 'lucide-vue-next'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { apiFetch } from '@/lib/api'
-
-type AssistantTemplateSummary = {
-  id: number
-  name: string
-  slug: string
-  description?: string
-  isSystem: boolean
-  updatedAt: string
-}
+import { useToast } from '@/composables/useToast'
 
 type TenantPayload = {
   id: number
@@ -141,10 +133,6 @@ type TenantPayload = {
   slug: string
   users: Array<{ id: number }>
   waInstances: Array<{ id: number }>
-  ragConfig?: {
-    assistantTemplateId: number | null
-    assistantTemplate: AssistantTemplateSummary | null
-  } | null
 }
 
 type DeleteTenantResponse = {
@@ -158,21 +146,21 @@ type DeleteTenantResponse = {
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const editingId = computed(() => {
   const raw = route.params.id
   return raw ? Number(raw) : null
 })
 
-const templates = ref<AssistantTemplateSummary[]>([])
 const pending = ref(false)
 const deleting = ref(false)
 const confirmDelete = ref(false)
+const showDeleteConfirm = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 
 const form = reactive({
   name: '',
-  templateId: 0,
 })
 
 const tenantStats = reactive({
@@ -182,9 +170,6 @@ const tenantStats = reactive({
 
 const canSave = computed(() => !!form.name.trim())
 const slugPreview = computed(() => slugifyTenantName(form.name))
-const selectedTemplateName = computed(() => {
-  return templates.value.find((item) => item.id === form.templateId)?.name || 'Belum dipilih'
-})
 
 function slugifyTenantName(value: string) {
   return (
@@ -202,13 +187,8 @@ function clearMessages() {
   successMessage.value = ''
 }
 
-async function loadTemplates() {
-  templates.value = await apiFetch<AssistantTemplateSummary[]>('/rag-config/templates')
-}
-
 function resetEditorState() {
   form.name = ''
-  form.templateId = 0
   tenantStats.users = 0
   tenantStats.instances = 0
   confirmDelete.value = false
@@ -220,7 +200,6 @@ async function loadTenant() {
 
   const tenant = await apiFetch<TenantPayload>(`/tenants/${editingId.value}`)
   form.name = tenant.name
-  form.templateId = tenant.ragConfig?.assistantTemplateId || 0
   tenantStats.users = tenant.users.length
   tenantStats.instances = tenant.waInstances.length
 }
@@ -228,34 +207,15 @@ async function loadTenant() {
 async function bootstrap() {
   clearMessages()
 
-  const results = await Promise.allSettled([loadTemplates(), loadTenant()])
-  const templateResult = results[0]
-  const tenantResult = results[1]
-
-  if (tenantResult.status === 'rejected') {
+  try {
+    await loadTenant()
+  } catch (error) {
     errorMessage.value =
-      tenantResult.reason instanceof Error
-        ? tenantResult.reason.message
+      error instanceof Error
+        ? error.message
         : 'Gagal memuat data tenant'
-    return
+    toast.notify({ kind: 'error', title: 'Gagal memuat tenant', message: errorMessage.value })
   }
-
-  if (templateResult.status === 'rejected') {
-    errorMessage.value =
-      templateResult.reason instanceof Error
-        ? `${templateResult.reason.message}. Data tenant tetap dimuat, tetapi daftar template belum tersedia.`
-        : 'Daftar template belum tersedia, tetapi data tenant berhasil dimuat.'
-  }
-}
-
-async function persistTemplateAssignment(tenantId: number) {
-  await apiFetch(`/rag-config/template-assignment?tenantId=${tenantId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      templateId: form.templateId || null,
-      clearAssistantFlowOverride: false,
-    }),
-  })
 }
 
 async function saveTenant() {
@@ -268,28 +228,29 @@ async function saveTenant() {
         method: 'PATCH',
         body: JSON.stringify({ name: form.name }),
       })
-      await persistTemplateAssignment(editingId.value)
       successMessage.value = 'Tenant berhasil diperbarui.'
+      toast.notify({ kind: 'success', title: 'Tenant berhasil diperbarui' })
       await loadTenant()
     } else {
       const created = await apiFetch<TenantPayload>('/tenants', {
         method: 'POST',
         body: JSON.stringify({ name: form.name }),
       })
-      await persistTemplateAssignment(created.id)
+      toast.notify({ kind: 'success', title: 'Tenant berhasil dibuat', message: created.name })
       await router.push('/tenants')
       return
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Gagal menyimpan tenant'
+    toast.notify({ kind: 'error', title: 'Gagal menyimpan tenant', message: errorMessage.value })
   } finally {
     pending.value = false
   }
 }
 
-function openSelectedTemplate() {
-  if (!form.templateId) return
-  router.push(`/ai-settings/rag-config/${form.templateId}/edit`)
+function openTenantTraining() {
+  if (!editingId.value) return
+  router.push(`/ai-training?tenantId=${editingId.value}`)
 }
 
 async function deleteTenant() {
@@ -303,9 +264,12 @@ async function deleteTenant() {
       method: 'DELETE',
     })
     successMessage.value = `Tenant dihapus. ${result.detachedUsers} user, ${result.detachedInstances} instance, ${result.detachedKnowledgeSources} knowledge source, dan ${result.detachedConversations} conversation dilepas dari tenant ini.`
+    toast.notify({ kind: 'success', title: 'Tenant berhasil dihapus', message: result.name })
+    showDeleteConfirm.value = false
     await router.push('/tenants')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Gagal menghapus tenant'
+    toast.notify({ kind: 'error', title: 'Gagal menghapus tenant', message: errorMessage.value })
   } finally {
     deleting.value = false
   }

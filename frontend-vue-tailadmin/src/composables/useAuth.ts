@@ -5,7 +5,7 @@ type AuthUser = {
   id: number
   name: string
   email: string
-  role: 'admin' | 'user'
+  role: 'platform_admin' | 'tenant_admin' | 'tenant_staff'
   tenantId: number | null
   tenantName: string | null
   isActive: boolean

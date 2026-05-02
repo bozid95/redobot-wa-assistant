@@ -135,7 +135,7 @@
         </div>
       </section>
 
-      <div v-if="activeTab === 'profile'" class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <div v-if="activeTab === 'profile'" class="grid grid-cols-1 gap-6">
         <section class="rounded-3xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
           <div>
             <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Profile</h3>
@@ -172,45 +172,6 @@
           </div>
         </section>
 
-        <section class="rounded-3xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Opening Menu</h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Menu pembuka opsional untuk template yang ingin menawarkan jalur pertanyaan lebih terarah.
-              </p>
-            </div>
-            <label class="inline-flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-              <input v-model="draft.profile.menuEnabled" type="checkbox" class="size-4 rounded border-gray-300" />
-              Aktifkan menu pembuka
-            </label>
-          </div>
-
-          <div class="mt-6 space-y-4">
-            <div
-              v-for="(item, index) in draft.profile.menuItems"
-              :key="item.id"
-              class="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Menu {{ index + 1 }}</p>
-                <button type="button" class="ghost-btn text-error-600 dark:text-error-400" @click="removeMenuItem(index)">Remove</button>
-              </div>
-              <div class="mt-4 grid grid-cols-1 gap-4">
-                <div>
-                  <label class="form-label">Label</label>
-                  <input v-model="item.label" class="form-input" placeholder="Contoh: Tanya harga" />
-                </div>
-                <div>
-                  <label class="form-label">Prompt Rewrite</label>
-                  <textarea v-model="item.prompt" class="form-textarea" rows="3" placeholder="Contoh: tolong tampilkan harga layanan yang tersedia" />
-                </div>
-              </div>
-            </div>
-
-            <Button variant="outline" @click="addMenuItem">Add Menu Item</Button>
-          </div>
-        </section>
       </div>
 
       <section
@@ -657,6 +618,7 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type ActionType =
   | 'answer_from_knowledge'
@@ -747,6 +709,7 @@ const fieldTypeOptions: FieldType[] = ['text', 'phone', 'date', 'select', 'texta
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const activeTab = ref<'profile' | 'intents' | 'fields' | 'actions' | 'routing' | 'preview' | 'advanced'>('profile')
 const tabs = [
   { id: 'profile', label: 'Profile' },
@@ -842,15 +805,12 @@ function createSeedDraft(): AssistantFlowDraft {
     profile: {
       assistantName: 'Nara Assistant',
       businessContext: 'asisten WhatsApp untuk konsultasi layanan, pemesanan, dan follow up pelanggan',
-      greetingMessage: 'Halo kak, saya siap bantu. Boleh pilih kebutuhan kakak atau langsung kirim pertanyaannya ya.',
+      greetingMessage: 'Halo kak, saya siap bantu. Silakan kirim pertanyaannya ya.',
       clarifyMessage: 'Siap kak, supaya saya bantu lebih tepat, boleh dijelaskan sedikit kebutuhan utamanya?',
       fallbackMessage: 'Maaf kak, saya belum menemukan jawaban yang cukup yakin dari data aktif. Boleh dijelaskan sedikit lebih detail?',
       thanksMessage: 'Sama-sama kak. Kalau masih ada yang ingin ditanyakan, saya siap bantu lagi ya.',
-      menuEnabled: true,
-      menuItems: [
-        { id: createId('menu'), label: 'Tanya harga', prompt: 'tolong tampilkan harga layanan yang tersedia' },
-        { id: createId('menu'), label: 'Mau reservasi', prompt: 'saya ingin reservasi atau booking layanan' },
-      ],
+      menuEnabled: false,
+      menuItems: [],
     },
     intents: [
       {
@@ -920,9 +880,12 @@ function clearMessages() {
   flashMessage.value = ''
 }
 
-function setFlash(kind: 'success' | 'error' | 'info', message: string) {
+function setFlash(kind: 'success' | 'error' | 'info', message: string, showToast = true) {
   flashKind.value = kind
   flashMessage.value = message
+  if (showToast) {
+    toast.notify({ kind, title: message })
+  }
 }
 
 function formatUpdatedAt(value: string | null) {
@@ -1027,7 +990,7 @@ async function loadCurrentTemplate() {
       templateForm.description = ''
       baselineDraft.value = deepClone(exampleDraft.value)
       assignDraft(exampleDraft.value)
-      setFlash('info', 'Editor template siap dipakai. Isi metadata template lalu simpan saat sudah siap.')
+      setFlash('info', 'Editor template siap dipakai. Isi metadata template lalu simpan saat sudah siap.', false)
       return
     }
 
@@ -1039,7 +1002,7 @@ async function loadCurrentTemplate() {
     }
 
     applyTemplate(selected)
-    setFlash('info', `Template ${selected.name} berhasil dimuat untuk diedit.`)
+    setFlash('info', `Template ${selected.name} berhasil dimuat untuk diedit.`, false)
   } catch (error) {
     setFlash('error', error instanceof Error ? error.message : 'Gagal memuat template')
   } finally {
@@ -1120,14 +1083,6 @@ function reloadTemplate() {
 
 function backToTemplates() {
   router.push('/ai-settings/rag-config')
-}
-
-function addMenuItem() {
-  draft.profile.menuItems.push({ id: createId('menu'), label: '', prompt: '' })
-}
-
-function removeMenuItem(index: number) {
-  draft.profile.menuItems.splice(index, 1)
 }
 
 function addIntent() {

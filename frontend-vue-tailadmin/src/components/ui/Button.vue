@@ -5,12 +5,20 @@
       sizeClasses[size],
       variantClasses[variant],
       className,
-      { 'cursor-not-allowed opacity-50': disabled },
+      {
+        'cursor-not-allowed opacity-50': disabled && !loading,
+        'cursor-wait opacity-90': loading,
+      },
     ]"
     @click="onClick"
-    :disabled="disabled"
+    :disabled="disabled || loading"
   >
-    <span v-if="startIcon" class="flex items-center">
+    <span
+      v-if="loading"
+      class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+      aria-hidden="true"
+    ></span>
+    <span v-else-if="startIcon" class="flex items-center">
       <component :is="startIcon" />
     </span>
     <slot></slot>
@@ -31,6 +39,7 @@ interface ButtonProps {
   onClick?: () => void
   className?: string
   disabled?: boolean
+  loading?: boolean
 }
 
 const props = withDefaults(defineProps<ButtonProps>(), {
@@ -38,6 +47,7 @@ const props = withDefaults(defineProps<ButtonProps>(), {
   variant: 'primary',
   className: '',
   disabled: false,
+  loading: false,
 })
 
 const sizeClasses = {
@@ -52,7 +62,7 @@ const variantClasses = {
 }
 
 const onClick = () => {
-  if (!props.disabled && props.onClick) {
+  if (!props.disabled && !props.loading && props.onClick) {
     props.onClick()
   }
 }

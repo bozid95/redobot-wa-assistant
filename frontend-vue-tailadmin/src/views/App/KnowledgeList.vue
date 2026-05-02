@@ -43,7 +43,7 @@
                 class="h-11 w-full rounded-lg border border-gray-300 bg-transparent pr-4 pl-10 text-sm text-gray-800 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
               />
             </div>
-            <Button size="sm" variant="outline" :startIcon="RefreshCw" :disabled="pending" @click="reindexAll">Reindex</Button>
+            <Button size="sm" variant="outline" :startIcon="RefreshCw" :loading="pending" @click="reindexAll">Reindex</Button>
           </div>
         </div>
       </div>
@@ -85,7 +85,7 @@
                   <router-link :to="`/knowledge/${article.id}/edit`">
                     <Button size="sm" variant="outline">Edit</Button>
                   </router-link>
-                  <Button size="sm" variant="outline" :disabled="pending" @click="removeArticle(article.id)">Delete</Button>
+                  <Button size="sm" variant="outline" :loading="pending" @click="removeArticle(article.id)">Delete</Button>
                 </div>
               </td>
             </tr>
@@ -98,6 +98,16 @@
         </table>
       </div>
     </section>
+
+    <ConfirmDialog
+      :open="deleteTargetId !== null"
+      title="Hapus artikel knowledge?"
+      message="Artikel ini akan dihapus dari knowledge dan tidak dipakai lagi oleh AI."
+      confirmText="Hapus Artikel"
+      :loading="pending"
+      @cancel="deleteTargetId = null"
+      @confirm="confirmRemoveArticle"
+    />
   </admin-layout>
 </template>
 
@@ -108,7 +118,9 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type KnowledgeArticle = {
   id: number
@@ -122,19 +134,40 @@ type KnowledgeArticle = {
 const articles = ref<KnowledgeArticle[]>([])
 const search = ref('')
 const pending = ref(false)
+const toast = useToast()
+const deleteTargetId = ref<number | null>(null)
 
 async function loadData() {
-  articles.value = await apiFetch<KnowledgeArticle[]>('/knowledge')
+  try {
+    articles.value = await apiFetch<KnowledgeArticle[]>('/knowledge')
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal memuat knowledge',
+      message: error instanceof Error ? error.message : 'Coba refresh halaman.',
+    })
+  }
 }
 
 async function removeArticle(id: number) {
-  const confirmed = window.confirm('Hapus artikel ini?')
-  if (!confirmed) return
+  deleteTargetId.value = id
+}
+
+async function confirmRemoveArticle() {
+  if (deleteTargetId.value === null) return
 
   pending.value = true
   try {
-    await apiFetch(`/knowledge/${id}`, { method: 'DELETE' })
+    await apiFetch(`/knowledge/${deleteTargetId.value}`, { method: 'DELETE' })
+    toast.notify({ kind: 'success', title: 'Artikel knowledge berhasil dihapus' })
+    deleteTargetId.value = null
     await loadData()
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal menghapus artikel',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     pending.value = false
   }
@@ -147,7 +180,14 @@ async function reindexAll() {
       method: 'POST',
       body: JSON.stringify({}),
     })
+    toast.notify({ kind: 'success', title: 'Reindex knowledge berhasil dijalankan' })
     await loadData()
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal menjalankan reindex',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     pending.value = false
   }

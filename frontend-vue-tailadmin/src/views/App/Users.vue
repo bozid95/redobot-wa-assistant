@@ -18,7 +18,7 @@
           </div>
 
           <div class="flex flex-wrap gap-3">
-            <Button variant="outline" :disabled="loading" @click="bootstrap">
+            <Button variant="outline" :loading="loading" @click="bootstrap">
               {{ loading ? 'Refreshing...' : 'Refresh' }}
             </Button>
             <router-link to="/users/new">
@@ -37,7 +37,7 @@
             <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ activeUsersCount }}</p>
           </div>
           <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
-            <p class="text-xs uppercase tracking-wide text-gray-500">Admins</p>
+            <p class="text-xs uppercase tracking-wide text-gray-500">Platform Admin</p>
             <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ adminUsersCount }}</p>
           </div>
         </div>
@@ -112,7 +112,7 @@
                   <span
                     :class="[
                       'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide',
-                      item.role === 'admin'
+                      item.role === 'platform_admin'
                         ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
                         : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
                     ]"
@@ -171,7 +171,7 @@ type UserItem = {
   id: number
   email: string
   name: string
-  role: 'admin' | 'user'
+  role: UserRole
   tenantId: number | null
   isActive: boolean
   createdAt: string
@@ -200,7 +200,9 @@ const filteredUsers = computed(() => {
 })
 
 const activeUsersCount = computed(() => users.value.filter((item) => item.isActive).length)
-const adminUsersCount = computed(() => users.value.filter((item) => item.role === 'admin').length)
+type UserRole = 'platform_admin' | 'tenant_admin' | 'tenant_staff'
+
+const adminUsersCount = computed(() => users.value.filter((item) => item.role === 'platform_admin').length)
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString('id-ID', {

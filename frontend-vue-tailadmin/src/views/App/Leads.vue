@@ -8,7 +8,7 @@
           <h3 class="font-medium text-gray-800 dark:text-white/90">Fallback Leads</h3>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Lead yang gagal dijawab bot dan butuh follow up.</p>
         </div>
-        <Button variant="outline" :startIcon="RefreshCw" :disabled="loading" @click="loadData">Refresh</Button>
+        <Button variant="outline" :startIcon="RefreshCw" :loading="loading" @click="loadData">Refresh</Button>
       </div>
 
       <div class="custom-scrollbar max-w-full overflow-x-auto">
@@ -48,12 +48,12 @@
               </td>
               <td class="px-5 py-4 align-top sm:px-6">
                 <div class="flex min-w-[220px] flex-wrap gap-2">
-                  <Button v-if="lead.status === 'open'" size="sm" :disabled="loading" @click="closeLead(lead.id)">Tutup Lead</Button>
+                  <Button v-if="lead.status === 'open'" size="sm" :loading="loading" @click="closeLead(lead.id)">Tutup Lead</Button>
                   <router-link
-                    to="/knowledge"
+                    :to="trainingLink(lead)"
                     class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   >
-                    Perbaiki Knowledge
+                    Lengkapi Latih AI
                   </router-link>
                 </div>
               </td>
@@ -78,6 +78,7 @@ import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type Lead = {
   id: number
@@ -89,11 +90,31 @@ type Lead = {
 
 const leads = ref<Lead[]>([])
 const loading = ref(false)
+const toast = useToast()
+
+function trainingLink(lead: Lead) {
+  return {
+    path: '/ai-training',
+    query: {
+      step: 'knowledge',
+      leadId: String(lead.id),
+      question: lead.question,
+      reason: lead.reason,
+      phone: lead.phone,
+    },
+  }
+}
 
 async function loadData() {
   loading.value = true
   try {
     leads.value = await apiFetch<Lead[]>('/leads')
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal memuat leads',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     loading.value = false
   }
@@ -103,7 +124,14 @@ async function closeLead(id: number) {
   loading.value = true
   try {
     await apiFetch(`/leads/${id}/close`, { method: 'PATCH' })
+    toast.notify({ kind: 'success', title: 'Lead berhasil ditutup' })
     await loadData()
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal menutup lead',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     loading.value = false
   }

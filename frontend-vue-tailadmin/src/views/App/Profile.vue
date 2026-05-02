@@ -49,7 +49,7 @@
         <p v-if="profileError" class="mt-4 text-sm text-error-600 dark:text-error-400">{{ profileError }}</p>
 
         <div class="mt-6 flex gap-3">
-          <Button :disabled="profileLoading" @click="saveProfile">
+          <Button :loading="profileLoading" @click="saveProfile">
             {{ profileLoading ? 'Menyimpan...' : 'Simpan Profil' }}
           </Button>
         </div>
@@ -88,7 +88,7 @@
         <p v-if="passwordError" class="mt-4 text-sm text-error-600 dark:text-error-400">{{ passwordError }}</p>
 
         <div class="mt-6 flex gap-3">
-          <Button :disabled="passwordLoading" @click="savePassword">
+          <Button :loading="passwordLoading" @click="savePassword">
             {{ passwordLoading ? 'Menyimpan...' : 'Ganti Password' }}
           </Button>
         </div>
@@ -103,8 +103,10 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useToast } from '@/composables/useToast'
 
 const auth = useAuth()
+const toast = useToast()
 
 const profileName = ref('')
 const profileLoading = ref(false)
@@ -132,8 +134,10 @@ async function saveProfile() {
   try {
     await auth.updateProfile(profileName.value)
     profileMessage.value = 'Profil berhasil diperbarui.'
+    toast.notify({ kind: 'success', title: 'Profil berhasil diperbarui' })
   } catch (error) {
     profileError.value = error instanceof Error ? error.message : 'Gagal menyimpan profil'
+    toast.notify({ kind: 'error', title: 'Gagal menyimpan profil', message: profileError.value })
   } finally {
     profileLoading.value = false
   }
@@ -149,8 +153,10 @@ async function savePassword() {
     passwordMessage.value = 'Password berhasil diperbarui.'
     passwordForm.value.currentPassword = ''
     passwordForm.value.newPassword = ''
+    toast.notify({ kind: 'success', title: 'Password berhasil diperbarui' })
   } catch (error) {
     passwordError.value = error instanceof Error ? error.message : 'Gagal memperbarui password'
+    toast.notify({ kind: 'error', title: 'Gagal memperbarui password', message: passwordError.value })
   } finally {
     passwordLoading.value = false
   }

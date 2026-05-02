@@ -83,7 +83,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { GridIcon, HorizontalDots, PlugInIcon } from '../../icons'
-import { Inbox, RadioTower, BookOpenText, Users, Building2, UserCircle2, BrainCircuit } from 'lucide-vue-next'
+import { Inbox, RadioTower, Users, Building2, UserCircle2, Bot } from 'lucide-vue-next'
 import SidebarWidget from './SidebarWidget.vue'
 import { useSidebar } from '@/composables/useSidebar'
 import { useAuth } from '@/composables/useAuth'
@@ -92,17 +92,22 @@ const route = useRoute()
 const { isExpanded, isMobileOpen, isHovered } = useSidebar()
 const auth = useAuth()
 
+const isPlatformAdmin = computed(() => auth.user.value?.role === 'platform_admin')
+const canTrainAi = computed(() => auth.user.value?.role === 'tenant_admin')
+
 const menuGroups = computed(() => {
+  const menuItems = [
+    { icon: GridIcon, name: 'Overview', path: '/' },
+    { icon: RadioTower, name: 'Connection', path: '/connection' },
+    { icon: Inbox, name: 'Inbox', path: '/inbox' },
+    ...(canTrainAi.value ? [{ icon: Bot, name: 'Latih AI', path: '/ai-training' }] : []),
+    { icon: Users, name: 'Leads', path: '/leads' },
+  ]
+
   const groups = [
     {
       title: 'Menu',
-      items: [
-        { icon: GridIcon, name: 'Overview', path: '/' },
-        { icon: RadioTower, name: 'Connection', path: '/connection' },
-        { icon: Inbox, name: 'Inbox', path: '/inbox' },
-        { icon: BookOpenText, name: 'Knowledge', path: '/knowledge' },
-        { icon: Users, name: 'Leads', path: '/leads' },
-      ],
+      items: menuItems,
     },
     {
       title: 'Account',
@@ -110,13 +115,12 @@ const menuGroups = computed(() => {
     },
   ]
 
-  if (auth.user.value?.role === 'admin') {
+  if (isPlatformAdmin.value) {
     groups.push({
       title: 'Management',
       items: [
         { icon: Building2, name: 'Tenants', path: '/tenants' },
         { icon: Users, name: 'Users', path: '/users' },
-        { icon: BrainCircuit, name: 'AI Templates', path: '/ai-settings/rag-config' },
       ],
     })
   }

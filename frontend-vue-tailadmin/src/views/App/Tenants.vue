@@ -13,12 +13,12 @@
               </span>
             </div>
             <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-              Halaman ini fokus untuk list dan pencarian tenant. Tambah, edit, assignment template, dan delete tenant dilakukan di halaman terpisah agar lebih rapi.
+              Halaman ini fokus untuk list dan pencarian tenant. Tambah, edit, setup AI, dan delete tenant dilakukan di halaman terpisah agar lebih rapi.
             </p>
           </div>
 
           <div class="flex flex-wrap gap-3">
-            <Button variant="outline" :disabled="loading" @click="loadTenants">
+            <Button variant="outline" :loading="loading" @click="loadTenants">
               {{ loading ? 'Refreshing...' : 'Refresh' }}
             </Button>
             <router-link to="/tenants/new">
@@ -27,14 +27,10 @@
           </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
             <p class="text-xs uppercase tracking-wide text-gray-500">Total Tenants</p>
             <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ tenants.length }}</p>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
-            <p class="text-xs uppercase tracking-wide text-gray-500">Assigned Template</p>
-            <p class="mt-2 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ assignedTemplateCount }}</p>
           </div>
           <div class="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900">
             <p class="text-xs uppercase tracking-wide text-gray-500">Users</p>
@@ -63,7 +59,7 @@
               <input
                 v-model="search"
                 class="h-11 w-full rounded-xl border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90 sm:w-80"
-                placeholder="Cari nama tenant, slug, atau template"
+                placeholder="Cari nama tenant atau slug"
               />
             </div>
           </div>
@@ -74,7 +70,6 @@
             <thead class="bg-gray-50 dark:bg-gray-900/60">
               <tr>
                 <th class="table-head">Tenant</th>
-                <th class="table-head">Template</th>
                 <th class="table-head">Users</th>
                 <th class="table-head">Instances</th>
                 <th class="table-head">Created</th>
@@ -83,12 +78,12 @@
             </thead>
             <tbody>
               <tr v-if="loading">
-                <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
                   Memuat tenant...
                 </td>
               </tr>
               <tr v-else-if="!filteredTenants.length">
-                <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
                   Tidak ada tenant yang cocok dengan pencarian saat ini.
                 </td>
               </tr>
@@ -101,16 +96,6 @@
                   <div>
                     <p class="font-medium text-gray-800 dark:text-white/90">{{ item.name }}</p>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ item.slug }}</p>
-                  </div>
-                </td>
-                <td class="table-cell">
-                  <div>
-                    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">
-                      {{ item.ragConfig?.assistantTemplate?.name || 'Belum dipilih' }}
-                    </p>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {{ item.ragConfig?.assistantTemplate?.isSystem ? 'System template' : item.ragConfig?.assistantTemplate ? 'Custom template' : 'No assignment' }}
-                    </p>
                   </div>
                 </td>
                 <td class="table-cell text-sm text-gray-500 dark:text-gray-400">
@@ -145,15 +130,6 @@ import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import { apiFetch } from '@/lib/api'
 
-type AssistantTemplateSummary = {
-  id: number
-  name: string
-  slug: string
-  description?: string
-  isSystem: boolean
-  updatedAt: string
-}
-
 type TenantItem = {
   id: number
   name: string
@@ -161,10 +137,6 @@ type TenantItem = {
   createdAt: string
   users: Array<{ id: number }>
   waInstances: Array<{ id: number }>
-  ragConfig?: {
-    assistantTemplateId: number | null
-    assistantTemplate: AssistantTemplateSummary | null
-  } | null
 }
 
 const loading = ref(false)
@@ -179,17 +151,11 @@ const filteredTenants = computed(() => {
   return tenants.value.filter((item) => {
     return (
       item.name.toLowerCase().includes(keyword) ||
-      item.slug.toLowerCase().includes(keyword) ||
-      String(item.ragConfig?.assistantTemplate?.name || '')
-        .toLowerCase()
-        .includes(keyword)
+      item.slug.toLowerCase().includes(keyword)
     )
   })
 })
 
-const assignedTemplateCount = computed(
-  () => tenants.value.filter((item) => item.ragConfig?.assistantTemplateId).length,
-)
 const totalUsersCount = computed(() =>
   tenants.value.reduce((sum, item) => sum + item.users.length, 0),
 )

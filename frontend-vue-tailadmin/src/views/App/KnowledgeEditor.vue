@@ -13,8 +13,8 @@
             <router-link to="/knowledge">
               <Button size="sm" variant="outline" :startIcon="ArrowLeft">Back to list</Button>
             </router-link>
-            <Button v-if="editingId" size="sm" variant="outline" :startIcon="Trash2" :disabled="pending" @click="removeCurrent">Delete</Button>
-            <Button size="sm" :startIcon="Save" :disabled="pending || !hasContent" @click="saveArticle">
+            <Button v-if="editingId" size="sm" variant="outline" :startIcon="Trash2" :loading="pending" @click="showDeleteConfirm = true">Delete</Button>
+            <Button size="sm" :startIcon="Save" :loading="pending" :disabled="!hasContent" @click="saveArticle">
               {{ pending ? 'Saving...' : editingId ? 'Update' : 'Save' }}
             </Button>
           </div>
@@ -53,6 +53,16 @@
         </div>
       </div>
     </section>
+
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      title="Hapus artikel knowledge?"
+      message="Artikel ini akan dihapus dari knowledge dan tidak dipakai lagi oleh AI."
+      confirmText="Hapus Artikel"
+      :loading="pending"
+      @cancel="showDeleteConfirm = false"
+      @confirm="removeCurrent"
+    />
   </admin-layout>
 </template>
 
@@ -66,7 +76,9 @@ import { EditorContent, useEditor } from '@tiptap/vue-3'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { apiFetch } from '@/lib/api'
+import { useToast } from '@/composables/useToast'
 
 type KnowledgeArticle = {
   id: number
@@ -76,7 +88,9 @@ type KnowledgeArticle = {
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToast()
 const pending = ref(false)
+const showDeleteConfirm = ref(false)
 const editingId = computed(() => {
   const raw = route.params.id
   return raw ? Number(raw) : null
@@ -115,6 +129,7 @@ async function loadArticle() {
   const article = articles.find(item => item.id === editingId.value)
 
   if (!article) {
+    toast.notify({ kind: 'warning', title: 'Artikel knowledge tidak ditemukan' })
     await router.push('/knowledge')
     return
   }
@@ -133,13 +148,21 @@ async function saveArticle() {
         method: 'PATCH',
         body: JSON.stringify({ title: form.title, content: form.content }),
       })
+      toast.notify({ kind: 'success', title: 'Artikel knowledge berhasil diperbarui' })
     } else {
       await apiFetch('/knowledge', {
         method: 'POST',
         body: JSON.stringify({ title: form.title, content: form.content }),
       })
+      toast.notify({ kind: 'success', title: 'Artikel knowledge berhasil dibuat' })
     }
     await router.push('/knowledge')
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal menyimpan artikel',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     pending.value = false
   }
@@ -147,13 +170,19 @@ async function saveArticle() {
 
 async function removeCurrent() {
   if (!editingId.value) return
-  const confirmed = window.confirm('Hapus artikel ini?')
-  if (!confirmed) return
 
   pending.value = true
   try {
     await apiFetch(`/knowledge/${editingId.value}`, { method: 'DELETE' })
+    toast.notify({ kind: 'success', title: 'Artikel knowledge berhasil dihapus' })
+    showDeleteConfirm.value = false
     await router.push('/knowledge')
+  } catch (error) {
+    toast.notify({
+      kind: 'error',
+      title: 'Gagal menghapus artikel',
+      message: error instanceof Error ? error.message : undefined,
+    })
   } finally {
     pending.value = false
   }
