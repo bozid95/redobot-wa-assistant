@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RadioTower, RefreshCw } from 'lucide-vue-next'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
@@ -69,11 +69,16 @@ const data = ref<InstanceResponse | null>(null)
 const loading = ref(false)
 const pending = ref(false)
 const toast = useToast()
+let refreshTimer: ReturnType<typeof window.setInterval> | null = null
 
 async function loadData() {
   loading.value = true
   try {
     data.value = await apiFetch<InstanceResponse>('/whatsapp/instance')
+    const status = String(data.value?.status || '').toLowerCase()
+    if (['connecting', 'qr', 'pairing'].includes(status)) {
+      startStatusPolling()
+    }
   } catch (error) {
     toast.notify({
       kind: 'error',
@@ -91,6 +96,7 @@ async function connect() {
     await apiFetch('/whatsapp/instance/connect', { method: 'POST' })
     toast.notify({ kind: 'success', title: 'Koneksi WhatsApp sedang diproses' })
     await loadData()
+    startStatusPolling()
   } catch (error) {
     toast.notify({
       kind: 'error',
@@ -119,7 +125,30 @@ async function disconnect() {
   }
 }
 
-onMounted(loadData)
+function startStatusPolling() {
+  if (refreshTimer) return
+  refreshTimer = window.setInterval(() => {
+    const status = connectionStatus.value.toLowerCase()
+    if (!['connecting', 'qr', 'pairing'].includes(status)) {
+      stopStatusPolling()
+      return
+    }
+    void loadData()
+  }, 5000)
+}
+
+function stopStatusPolling() {
+  if (!refreshTimer) return
+  window.clearInterval(refreshTimer)
+  refreshTimer = null
+}
+
+onMounted(async () => {
+  await loadData()
+  startStatusPolling()
+})
+
+onBeforeUnmount(stopStatusPolling)
 
 const instanceName = computed(() => data.value?.instanceName || data.value?.instance_name || 'redobot WA Asisten')
 const connectionStatus = computed(() => String(data.value?.status || 'not_created'))

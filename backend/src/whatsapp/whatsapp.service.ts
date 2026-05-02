@@ -133,6 +133,30 @@ export class WhatsappService {
     );
   }
 
+  private extractConnectionStateText(state: any) {
+    return (
+      state?.instance?.state ??
+      state?.instance?.status ??
+      state?.instance?.connectionStatus ??
+      state?.state ??
+      state?.status ??
+      state?.connectionStatus ??
+      ''
+    );
+  }
+
+  private extractPhoneNumber(state: any) {
+    return String(
+      state?.instance?.number ??
+        state?.instance?.phoneNumber ??
+        state?.instance?.owner ??
+        state?.number ??
+        state?.phoneNumber ??
+        state?.owner ??
+        '',
+    ).replace(/\D/g, '') || null;
+  }
+
   private async persistInstance(
     tenantId: number,
     instanceName: string,
@@ -168,9 +192,22 @@ export class WhatsappService {
   }
 
   async getInstance(tenantId: number) {
-    return this.prisma.waInstance.findUnique({
-      where: { tenantId },
-    });
+    const instance = await this.getTenantInstanceOrThrow(tenantId);
+
+    try {
+      const state = await this.fetchConnectionState(instance.instanceName);
+      const status = this.mapConnectionState(this.extractConnectionStateText(state));
+      const phoneNumber = this.extractPhoneNumber(state) ?? instance.phoneNumber;
+
+      return this.persistInstance(tenantId, instance.instanceName, {
+        status,
+        phoneNumber,
+        qrCodeBase64: status === 'connected' ? null : instance.qrCodeBase64,
+        lastError: status === 'connected' ? null : instance.lastError,
+      });
+    } catch {
+      return instance;
+    }
   }
 
   async getInstanceByName(instanceName: string) {
@@ -231,10 +268,8 @@ export class WhatsappService {
       qrCodeBase64 = payload.base64 ?? payload.qrcode?.base64 ?? null;
 
       const state = await this.fetchConnectionState(instanceName);
-      const stateText = state.instance?.state ?? state.state ?? state.status ?? '';
-
-      phoneNumber = String(state.instance?.number ?? state.number ?? '')
-        .replace(/\D/g, '') || null;
+      const stateText = this.extractConnectionStateText(state);
+      phoneNumber = this.extractPhoneNumber(state);
 
       status = this.mapConnectionState(stateText);
       if (status === 'connected') {
