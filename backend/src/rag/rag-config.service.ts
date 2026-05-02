@@ -218,21 +218,8 @@ export class RagConfigService {
         fallbackMessage:
           this.sanitizeString(profile.fallbackMessage) || defaults.profile.fallbackMessage,
         thanksMessage: this.sanitizeString(profile.thanksMessage) || defaults.profile.thanksMessage,
-        menuEnabled: this.sanitizeBoolean(profile.menuEnabled, defaults.profile.menuEnabled),
-        menuItems:
-          Array.isArray(profile.menuItems) && profile.menuItems.length
-            ? profile.menuItems.map((item, index) => {
-                const menuItem = this.asRecord(item) || {}
-                return {
-                  id: this.sanitizeString(menuItem.id) || `menu-${index + 1}`,
-                  label: this.sanitizeString(menuItem.label) || `Menu ${index + 1}`,
-                  prompt:
-                    this.sanitizeString(menuItem.prompt) ||
-                    defaults.profile.menuItems[0]?.prompt ||
-                    '',
-                }
-              })
-            : defaults.profile.menuItems,
+        menuEnabled: false,
+        menuItems: [],
       },
       intents:
         Array.isArray(record.intents) && record.intents.length

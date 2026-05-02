@@ -153,13 +153,13 @@ export class UsersService {
       throw new BadRequestException('User yang sedang login tidak bisa menghapus dirinya sendiri');
     }
 
-    if (user.role === UserRole.admin) {
+    if (user.role === UserRole.platform_admin) {
       const adminCount = await this.prisma.appUser.count({
-        where: { role: UserRole.admin, isActive: true },
+        where: { role: UserRole.platform_admin, isActive: true },
       });
 
       if (adminCount <= 1) {
-        throw new BadRequestException('Minimal harus ada satu admin aktif di sistem');
+        throw new BadRequestException('Minimal harus ada satu platform admin aktif di sistem');
       }
     }
 

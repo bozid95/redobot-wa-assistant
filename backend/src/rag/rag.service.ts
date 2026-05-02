@@ -9,6 +9,7 @@ import {
   RagConfigValues,
 } from './rag-config.defaults';
 import { RagConfigService } from './rag-config.service';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 type RagAnswerSource = 'rag' | 'router_greeting' | 'router_clarify' | 'router_thanks';
 type QdrantSearchResult = {
@@ -73,6 +74,11 @@ type ResolvedFlowRoute = {
   rule: FlowRule | null;
 };
 
+type MenuSelection = {
+  rewrittenQuestion: string;
+  reply: string;
+};
+
 type RagDebugResult = {
   detectedIntents: string[];
   searchQuery: string;
@@ -82,13 +88,15 @@ type RagDebugResult = {
 
 @Injectable()
 export class RagService {
-  constructor(private readonly ragConfigService: RagConfigService) {}
+  constructor(
+    private readonly ragConfigService: RagConfigService,
+    private readonly knowledgeService: KnowledgeService,
+  ) {}
 
-  private readonly greetingPatterns = [/^(halo+|hai|hi)\b/i, /^(pagi|siang|sore|malam)\b/i, /^(permisi|assalamualaikum|tes)\b/i];
+  private readonly greetingPatterns = [/^(ha+lo+|ha+llo+|he+llo+|hai+|hi+)\b/i, /^(pagi|siang|sore|malam)\b/i, /^(permisi|assalamualaikum|assalamu'alaikum|tes)\b/i];
   private readonly thanksPatterns = [/^(terima kasih|makasih|thanks|thx)\b/i];
   private readonly shortAmbiguousPatterns = [/^(bisa|mau tanya|tanya|info|permisi|tes|halo admin)\b/i];
   private readonly shortFollowupPatterns = [/^(ya|iya|iyaa|yaa|yap|yes|oke|ok|lanjut|boleh|mau|gimana|bagaimana)\b/i];
-  private readonly legacyMenuSelectionPattern = /^[1-6]$/;
   private readonly legacyIntentPatterns: Record<string, RegExp[]> = {
     price: [/\b(harga|biaya|tarif|ongkos|bayar|dp|pembayaran)\b/i],
     requirement: [/\b(syarat|persyaratan|dokumen|berkas|ktp|minimal umur|usia)\b/i],
@@ -183,6 +191,19 @@ export class RagService {
     return question;
   }
 
+  private isGreetingOnly(text: string) {
+    const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!normalized) return false;
+    if (!this.greetingPatterns.some((pattern) => pattern.test(normalized))) return false;
+
+    const remainder = normalized
+      .replace(/^(ha+lo+|ha+llo+|he+llo+|hai+|hi+|pagi|siang|sore|malam|permisi|assalamualaikum|assalamu'alaikum|tes)\b[!,.?\s]*/i, '')
+      .replace(/^(kak|admin|min|gan|sis|bro)\b[!,.?\s]*/i, '')
+      .trim();
+
+    return !remainder;
+  }
+
   private detectLegacyIntents(text: string) {
     return (Object.entries(this.legacyIntentPatterns) as Array<[string, RegExp[]]>)
       .filter(([, patterns]) => patterns.some((pattern) => pattern.test(text)))
@@ -224,66 +245,152 @@ export class RagService {
       .join('\n');
   }
 
-  private async retrieveKnowledge(query: string, tenantId: number, config: RagConfigValues) {
-    const embeddingRes = await fetch(`${this.embeddingBaseUrl}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.embeddingApiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.embeddingModel,
-        input: query,
-      }),
-    });
-    const embeddingJson = await embeddingRes.json();
-    if (!embeddingRes.ok) {
-      throw new Error(`Embedding request failed: ${JSON.stringify(embeddingJson)}`);
-    }
+  private stripHtml(value: string) {
+    return String(value || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|h1|h2|h3|h4|h5|h6)>/gi, '\n')
+      .replace(/<li>/gi, '- ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
-    const vector = embeddingJson.data?.[0]?.embedding;
-    if (!Array.isArray(vector) || vector.length === 0) {
-      throw new Error('Embedding vector is empty');
-    }
+  private tokenizeForKeywordSearch(value: string) {
+    const tokens = String(value || '')
+      .toLowerCase()
+      .split(/[^a-z0-9\u00c0-\u024f]+/i)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 2);
 
-    const body: Record<string, unknown> = {
-      vector,
-      limit: config.topK,
-      with_payload: true,
+    const synonyms: Record<string, string[]> = {
+      harga: ['biaya', 'tarif', 'paket', 'price', 'pricing'],
+      biaya: ['harga', 'tarif', 'paket'],
+      tarif: ['harga', 'biaya', 'paket'],
+      paket: ['harga', 'biaya', 'tarif'],
+      alamat: ['lokasi', 'maps', 'tempat'],
+      lokasi: ['alamat', 'maps', 'tempat'],
+      jadwal: ['jam', 'buka', 'operasional'],
+      daftar: ['booking', 'reservasi', 'pendaftaran'],
+      booking: ['daftar', 'reservasi', 'pendaftaran'],
+      bayar: ['pembayaran', 'transfer', 'rekening', 'dp'],
     };
 
-    if (tenantId > 0) {
-      body.filter = {
-        must: [{ key: 'tenant_id', match: { value: tenantId } }],
-      };
-    }
+    return [...new Set(tokens.flatMap((token) => [token, ...(synonyms[token] || [])]))];
+  }
 
-    const searchRes = await fetch(
-      `${this.qdrantUrl}/collections/${encodeURIComponent(this.qdrantCollection)}/points/search`,
-      {
+  private async retrieveKnowledgeByKeyword(query: string, tenantId: number, config: RagConfigValues) {
+    if (!tenantId) return [];
+
+    const tokens = this.tokenizeForKeywordSearch(query);
+    if (!tokens.length) return [];
+
+    const articles = await this.knowledgeService.list(tenantId);
+    return articles
+      .map((article): RagMatch | null => {
+        const title = String(article.title || '').trim();
+        const text = this.stripHtml(article.content);
+        if (!title || !text) return null;
+
+        const titleLower = title.toLowerCase();
+        const textLower = text.toLowerCase();
+        const score = tokens.reduce((total, token) => {
+          if (titleLower.includes(token)) return total + 2;
+          if (textLower.includes(token)) return total + 1;
+          return total;
+        }, 0);
+
+        if (score <= 0) return null;
+
+        return {
+          title,
+          text: text.length > 1800 ? `${text.slice(0, 1800).trim()}...` : text,
+          page: null,
+          score: Math.min(0.95, 0.55 + score / Math.max(tokens.length * 3, 1)),
+        };
+      })
+      .filter((match): match is RagMatch => Boolean(match))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, config.maxChunks);
+  }
+
+  private async retrieveKnowledge(query: string, tenantId: number, config: RagConfigValues) {
+    try {
+      const embeddingRes = await fetch(`${this.embeddingBaseUrl}/embeddings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    );
-    const searchJson = await searchRes.json();
-    if (!searchRes.ok) {
-      throw new Error(`Qdrant search failed: ${JSON.stringify(searchJson)}`);
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.embeddingApiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.embeddingModel,
+          input: query,
+        }),
+      });
+      const embeddingJson = await embeddingRes.json();
+      if (!embeddingRes.ok) {
+        throw new Error(`Embedding request failed: ${JSON.stringify(embeddingJson)}`);
+      }
+
+      const vector = embeddingJson.data?.[0]?.embedding;
+      if (!Array.isArray(vector) || vector.length === 0) {
+        throw new Error('Embedding vector is empty');
+      }
+
+      const body: Record<string, unknown> = {
+        vector,
+        limit: config.topK,
+        with_payload: true,
+      };
+
+      if (tenantId > 0) {
+        body.filter = {
+          must: [{ key: 'tenant_id', match: { value: tenantId } }],
+        };
+      }
+
+      const searchRes = await fetch(
+        `${this.qdrantUrl}/collections/${encodeURIComponent(this.qdrantCollection)}/points/search`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      const searchJson = await searchRes.json();
+      if (!searchRes.ok) {
+        throw new Error(`Qdrant search failed: ${JSON.stringify(searchJson)}`);
+      }
+
+      const rawResults: QdrantSearchResult[] = Array.isArray(searchJson.result) ? searchJson.result : [];
+      const matches = rawResults
+        .filter((item: QdrantSearchResult) => Number(item.score || 0) >= config.scoreThreshold)
+        .slice(0, config.maxChunks)
+        .map((item: QdrantSearchResult): RagMatch => ({
+          score: Number(item.score || 0),
+          text: String(item.payload?.text || '').trim(),
+          title: item.payload?.title || 'Dokumen',
+          page: item.payload?.page || null,
+        }))
+        .filter((item: RagMatch) => item.text);
+
+      if (matches.length) {
+        return { rawResults, matches };
+      }
+
+      const keywordMatches = await this.retrieveKnowledgeByKeyword(query, tenantId, config);
+      return { rawResults, matches: keywordMatches };
+    } catch (error) {
+      const keywordMatches = await this.retrieveKnowledgeByKeyword(query, tenantId, config);
+      if (keywordMatches.length) {
+        return { rawResults: [], matches: keywordMatches };
+      }
+
+      throw error;
     }
-
-    const rawResults: QdrantSearchResult[] = Array.isArray(searchJson.result) ? searchJson.result : [];
-    const matches = rawResults
-      .filter((item: QdrantSearchResult) => Number(item.score || 0) >= config.scoreThreshold)
-      .slice(0, config.maxChunks)
-      .map((item: QdrantSearchResult): RagMatch => ({
-        score: Number(item.score || 0),
-        text: String(item.payload?.text || '').trim(),
-        title: item.payload?.title || 'Dokumen',
-        page: item.payload?.page || null,
-      }))
-      .filter((item: RagMatch) => item.text);
-
-    return { rawResults, matches };
   }
 
   private async buildPaymentInstructions(tenantId: number, config: RagConfigValues) {
@@ -371,85 +478,19 @@ export class RagService {
   }
 
   private buildLegacyMainMenu(config: RagConfigValues) {
-    return [
-      config.greetingMessage,
-      '',
-      'Silakan pilih kebutuhan kakak:',
-      '1. Lihat harga paket',
-      '2. Tanya syarat pendaftaran',
-      '3. Tanya jadwal atau jam operasional',
-      '4. Tanya alamat atau lokasi',
-      '5. Konsultasi paket yang cocok',
-      '6. Langsung daftar atau hubungi admin',
-      '',
-      'Balas angka saja ya kak, misalnya 1 atau 5. Kalau kakak langsung kirim pertanyaan juga tetap bisa.',
-    ].join('\n');
+    return config.greetingMessage;
   }
 
   private buildFlowMainMenu(flow: AssistantFlowDraft, config: RagConfigValues) {
-    if (!flow.profile.menuEnabled || !flow.profile.menuItems.length) {
-      return config.greetingMessage;
-    }
-
-    return [
-      flow.profile.greetingMessage || config.greetingMessage,
-      '',
-      'Silakan pilih kebutuhan kakak:',
-      ...flow.profile.menuItems.map((item, index) => `${index + 1}. ${item.label}`),
-      '',
-      'Balas angka sesuai menu atau langsung kirim pertanyaan bebas ya kak.',
-    ].join('\n');
+    return flow.profile.greetingMessage || config.greetingMessage;
   }
 
-  private resolveLegacyMenuSelection(question: string) {
-    const selected = question.trim();
-    if (!this.legacyMenuSelectionPattern.test(selected)) return null;
-
-    const mapping: Record<string, { rewrittenQuestion: string; reply: string }> = {
-      '1': {
-        rewrittenQuestion: 'tolong tampilkan daftar harga paket yang tersedia',
-        reply: 'Siap kak, saya bantu tampilkan informasi harga paket yang tersedia ya.',
-      },
-      '2': {
-        rewrittenQuestion: 'apa saja syarat pendaftaran',
-        reply: 'Siap kak, saya bantu jelaskan syarat pendaftarannya ya.',
-      },
-      '3': {
-        rewrittenQuestion: 'bagaimana jadwal dan jam operasional layanan',
-        reply: 'Siap kak, saya bantu jelaskan jadwal dan jam operasionalnya ya.',
-      },
-      '4': {
-        rewrittenQuestion: 'di mana alamat atau lokasi layanan',
-        reply: 'Siap kak, saya bantu jelaskan alamat atau lokasi layanannya ya.',
-      },
-      '5': {
-        rewrittenQuestion: 'tolong bantu rekomendasikan paket yang cocok',
-        reply: 'Siap kak, saya bantu rekomendasikan pilihan yang paling cocok sesuai kebutuhan kakak ya.',
-      },
-      '6': {
-        rewrittenQuestion: 'saya ingin daftar dan terhubung ke admin',
-        reply: 'Siap kak, kalau kakak ingin lanjut daftar saya bantu arahkan ke proses berikutnya ya.',
-      },
-    };
-
-    return mapping[selected];
+  private resolveLegacyMenuSelection(_question: string): MenuSelection | null {
+    return null;
   }
 
-  private resolveFlowMenuSelection(question: string, flow: AssistantFlowDraft) {
-    if (!flow.profile.menuEnabled) return null;
-
-    const selected = Number(question.trim());
-    if (!Number.isInteger(selected) || selected < 1 || selected > flow.profile.menuItems.length) {
-      return null;
-    }
-
-    const item = flow.profile.menuItems[selected - 1];
-    if (!item) return null;
-
-    return {
-      rewrittenQuestion: item.prompt,
-      reply: `Siap kak, saya bantu untuk pilihan "${item.label}" ya.`,
-    };
+  private resolveFlowMenuSelection(_question: string, _flow: AssistantFlowDraft): MenuSelection | null {
+    return null;
   }
 
   private extractLabeledValue(text: string, labels: string[]) {
@@ -917,7 +958,7 @@ export class RagService {
       };
     }
 
-    if (this.greetingPatterns.some((pattern) => pattern.test(normalizedText))) {
+    if (this.isGreetingOnly(normalizedText)) {
       const reply = this.buildLegacyMainMenu(config);
       return {
         result: {
@@ -1145,7 +1186,7 @@ export class RagService {
     const route = this.resolveFlowRoute(detectedIntents, flow);
     const collectedFlowData = this.extractConfiguredFields(effectiveQuestion, history, flow, salesContext);
 
-    if (this.greetingPatterns.some((pattern) => pattern.test(normalizedText))) {
+    if (this.isGreetingOnly(normalizedText)) {
       const reply = this.buildFlowMainMenu(flow, flowConfig);
       return {
         result: {

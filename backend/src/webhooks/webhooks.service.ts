@@ -195,7 +195,7 @@ export class WebhooksService {
         conversationId: conversation.id,
       },
       orderBy: { createdAt: 'desc' },
-      take: 6,
+      take: 12,
     });
 
     const history = recentMessages

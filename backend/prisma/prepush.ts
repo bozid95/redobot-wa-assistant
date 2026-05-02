@@ -29,8 +29,51 @@ async function main() {
   `);
 
   await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserRole') THEN
+        ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'platform_admin';
+        ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'tenant_admin';
+        ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'tenant_staff';
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
     ALTER TABLE IF EXISTS app_users
-    ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+    ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'tenant_staff';
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    DECLARE
+      role_type TEXT;
+    BEGIN
+      SELECT udt_name INTO role_type
+      FROM information_schema.columns
+      WHERE table_name = 'app_users' AND column_name = 'role';
+
+      IF role_type = 'UserRole' THEN
+        EXECUTE '
+          UPDATE app_users
+          SET role = CASE
+            WHEN role::text = ''admin'' THEN ''platform_admin''
+            WHEN role::text = ''user'' THEN ''tenant_staff''
+            WHEN role IS NULL OR role::text = '''' THEN ''tenant_staff''
+            ELSE role::text
+          END::"UserRole"
+        ';
+      ELSE
+        EXECUTE '
+          UPDATE app_users
+          SET role = CASE
+            WHEN role::text = ''admin'' THEN ''platform_admin''
+            WHEN role::text = ''user'' THEN ''tenant_staff''
+            WHEN role IS NULL OR role::text = '''' THEN ''tenant_staff''
+            ELSE role::text
+          END
+        ';
+      END IF;
+    END $$;
   `);
 
   await prisma.$executeRawUnsafe(`

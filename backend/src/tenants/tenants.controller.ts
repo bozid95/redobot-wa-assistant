@@ -17,7 +17,7 @@ import { TenantsService } from './tenants.service';
 
 @Controller('tenants')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(UserRole.admin)
+@Roles(UserRole.platform_admin)
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
@@ -25,7 +26,7 @@ import { ConversationTurn, RagService } from './rag.service';
 
 @Controller('rag-config')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(UserRole.admin)
+@Roles(UserRole.platform_admin)
 export class RagConfigController {
   constructor(
     private readonly ragConfigService: RagConfigService,
@@ -33,19 +34,36 @@ export class RagConfigController {
   ) {}
 
   private resolveTenantId(request: { user?: SessionPayload }, candidate?: string) {
+    const user = request.user
     const requestedTenantId = candidate ? Number(candidate) : null
-    if (requestedTenantId && Number.isInteger(requestedTenantId) && requestedTenantId > 0) {
+    if (
+      user?.role === UserRole.platform_admin &&
+      requestedTenantId &&
+      Number.isInteger(requestedTenantId) &&
+      requestedTenantId > 0
+    ) {
       return requestedTenantId
     }
 
-    const tenantId = request.user?.tenantId
+    const tenantId = user?.tenantId
     if (!tenantId) {
-      throw new BadRequestException('Admin belum terhubung ke tenant dan tenant target belum dipilih')
+      throw new BadRequestException('User belum terhubung ke tenant dan tenant target belum dipilih')
     }
+
+    if (
+      requestedTenantId &&
+      Number.isInteger(requestedTenantId) &&
+      requestedTenantId > 0 &&
+      requestedTenantId !== tenantId
+    ) {
+      throw new ForbiddenException('Tenant target tidak sesuai dengan user saat ini')
+    }
+
     return tenantId
   }
 
   @Get()
+  @Roles(UserRole.platform_admin, UserRole.tenant_admin)
   async getCurrent(
     @Req() request: { user?: SessionPayload },
     @Query('tenantId') tenantId?: string,
@@ -59,6 +77,7 @@ export class RagConfigController {
   }
 
   @Patch()
+  @Roles(UserRole.platform_admin, UserRole.tenant_admin)
   async update(
     @Req() request: { user?: SessionPayload },
     @Query('tenantId') tenantId: string | undefined,
@@ -81,6 +100,7 @@ export class RagConfigController {
   }
 
   @Patch('assistant-flow')
+  @Roles(UserRole.platform_admin, UserRole.tenant_admin)
   async updateAssistantFlow(
     @Req() request: { user?: SessionPayload },
     @Query('tenantId') tenantId: string | undefined,
@@ -90,6 +110,7 @@ export class RagConfigController {
   }
 
   @Patch('assistant-flow/reset')
+  @Roles(UserRole.platform_admin, UserRole.tenant_admin)
   async resetAssistantFlow(
     @Req() request: { user?: SessionPayload },
     @Query('tenantId') tenantId: string | undefined,
@@ -125,6 +146,7 @@ export class RagConfigController {
   }
 
   @Post('test')
+  @Roles(UserRole.platform_admin, UserRole.tenant_admin)
   async test(
     @Req() request: { user?: SessionPayload },
     @Query('tenantId') tenantIdQuery: string | undefined,

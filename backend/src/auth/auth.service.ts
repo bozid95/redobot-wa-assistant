@@ -86,7 +86,7 @@ export class AuthService {
           email,
           passwordHash: hashSync(password, 10),
           name,
-          role: 'admin',
+          role: 'platform_admin',
           tenantId: tenant.id,
           isActive: true,
         },
@@ -99,14 +99,13 @@ export class AuthService {
       data: {
         name,
         tenantId: existing.tenantId ?? tenant.id,
-        role: 'admin',
+        role: 'platform_admin',
         isActive: true,
       },
     });
   }
 
   async login(email: string, password: string) {
-    await this.ensureAdminSeed();
     const user = await this.prisma.appUser.findUnique({
       where: { email },
       include: { tenant: true },

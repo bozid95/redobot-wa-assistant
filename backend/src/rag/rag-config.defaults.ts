@@ -115,7 +115,7 @@ export function getDefaultRagConfig(): RagConfigValues {
         'layanan informasi resmi',
     ).trim(),
     greetingMessage:
-      'Halo kak, saya siap bantu. Silakan pilih kebutuhan kakak atau langsung kirim pertanyaannya ya.',
+      'Halo kak, saya siap bantu. Silakan kirim pertanyaannya ya.',
     clarifyMessage:
       'Siap kak, supaya lebih tepat saya bantu, boleh dijelaskan sedikit lebih detail kebutuhannya ya?',
     fallbackMessage:
@@ -156,19 +156,8 @@ export function createDefaultAssistantFlowDraft(config: Partial<RagConfigValues>
       clarifyMessage: resolved.clarifyMessage,
       fallbackMessage: resolved.fallbackMessage,
       thanksMessage: resolved.thanksMessage,
-      menuEnabled: true,
-      menuItems: [
-        {
-          id: 'menu-pricing',
-          label: 'Tanya harga',
-          prompt: 'tolong tampilkan harga layanan yang tersedia',
-        },
-        {
-          id: 'menu-booking',
-          label: 'Mau reservasi',
-          prompt: 'saya ingin reservasi atau booking layanan',
-        },
-      ],
+      menuEnabled: false,
+      menuItems: [],
     },
     intents: [
       {

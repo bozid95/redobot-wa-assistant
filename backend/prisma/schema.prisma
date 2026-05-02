@@ -58,8 +58,9 @@ enum WaInstanceStatus {
 }
 
 enum UserRole {
-  admin
-  user
+  platform_admin
+  tenant_admin
+  tenant_staff
 }
 
 model Tenant {
@@ -99,7 +100,7 @@ model AppUser {
   email        String    @unique
   passwordHash String    @map("password_hash")
   name         String    @default("Admin")
-  role         UserRole  @default(user)
+  role         UserRole  @default(tenant_staff)
   tenantId     Int?      @map("tenant_id")
   isActive     Boolean   @default(true) @map("is_active")
   createdAt    DateTime  @default(now()) @map("created_at")

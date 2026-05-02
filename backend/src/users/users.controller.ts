@@ -7,7 +7,7 @@ import { UsersService } from './users.service';
 
 @Controller('users')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles(UserRole.admin)
+@Roles(UserRole.platform_admin)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -37,7 +37,7 @@ export class UsersController {
       email: String(body.email || ''),
       password: String(body.password || ''),
       name: String(body.name || ''),
-      role: (body.role as UserRole) || UserRole.user,
+      role: (body.role as UserRole) || UserRole.tenant_staff,
       tenantId: Number(body.tenantId),
       isActive: body.isActive,
     });
