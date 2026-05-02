@@ -94,22 +94,6 @@
               />
             </div>
             <div>
-              <label class="form-label">Gaya Bahasa</label>
-              <select v-model="formatForm.tone" class="form-input">
-                <option value="friendly">Ramah seperti admin WA</option>
-                <option value="professional">Profesional dan rapi</option>
-                <option value="casual">Santai dan dekat</option>
-              </select>
-            </div>
-            <div>
-              <label class="form-label">Panjang Jawaban Default</label>
-              <select v-model="formatForm.length" class="form-input">
-                <option value="short">Singkat</option>
-                <option value="medium">Sedang</option>
-                <option value="complete">Lengkap</option>
-              </select>
-            </div>
-            <div>
               <label class="form-label">Sapaan Awal</label>
               <textarea v-model="profileForm.greetingMessage" class="form-textarea" rows="3" />
             </div>
