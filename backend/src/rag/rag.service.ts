@@ -366,12 +366,12 @@ export class RagService {
   private async buildPaymentInstructions(tenantId: number, config: RagConfigValues) {
     try {
       const { matches } = await this.retrieveKnowledge(
-        'metode pembayaran transfer bank rekening pembayaran bukti bayar konfirmasi pembayaran',
+        'metode pembayaran transfer bank rekening pembayaran konfirmasi pembayaran admin',
         tenantId,
         config,
       );
       if (matches.length === 0) {
-        return 'Silakan lanjut transfer sesuai rekening pembayaran yang berlaku, lalu kirim bukti bayarnya di chat ini ya kak.';
+        return null;
       }
 
       const context = matches
@@ -393,7 +393,9 @@ export class RagService {
               content: [
                 config.paymentPrompt,
                 'Tulis singkat, rapi, tanpa bold dan tanpa tabel.',
-                'Sebutkan nama bank, nama penerima, nomor rekening, jumlah DP bila tersedia, dan minta user kirim bukti bayar ke chat ini.',
+                'Sebutkan nama bank, nama penerima, nomor rekening, dan jumlah DP bila tersedia.',
+                'Jangan meminta bukti transfer, screenshot, foto, atau lampiran. Jangan mengklaim pembayaran sudah verified.',
+                'Jika pembayaran perlu dicek, katakan admin akan melakukan pengecekan manual.',
                 'Jika data pembayaran tidak jelas, balas persis dengan __NO_PAYMENT__.',
               ].join(' '),
             },
@@ -411,12 +413,12 @@ export class RagService {
 
       const answer = String(answerJson.choices?.[0]?.message?.content || '').trim();
       if (!answer || answer === '__NO_PAYMENT__') {
-        return 'Silakan lanjut transfer sesuai rekening pembayaran yang berlaku, lalu kirim bukti bayarnya di chat ini ya kak.';
+        return null;
       }
 
       return answer.replace(/\*\*/g, '').replace(/\*/g, '').replace(/\|/g, ' ').trim();
     } catch {
-      return 'Silakan lanjut transfer sesuai rekening pembayaran yang berlaku, lalu kirim bukti bayarnya di chat ini ya kak.';
+      return null;
     }
   }
 
@@ -629,9 +631,23 @@ export class RagService {
 
     if (action.type === 'send_payment_info') {
       const payment = await this.buildPaymentInstructions(tenantId, config);
+      if (!payment) {
+        return {
+          reply: config.fallbackMessage,
+          metadata: {
+            source: 'rag',
+            assistant_flow: true,
+            flow_action: action.key,
+            flow_type: action.type,
+            payment_requested: false,
+            payment_info_missing: true,
+          },
+        };
+      }
+
       const reply = [action.messageTemplate, payment].filter(Boolean).join('\n\n').trim();
       return {
-        reply: reply || payment,
+        reply,
         metadata: {
           source: 'rag',
           assistant_flow: true,
@@ -653,11 +669,29 @@ export class RagService {
       'Jika konteks tidak cukup, balas persis dengan __NO_ANSWER__.',
       'Gunakan bahasa Indonesia yang natural untuk chat WhatsApp dan sapa pelanggan dengan "kak" bila cocok.',
       'Gunakan tulisan biasa yang rapi. Jangan gunakan bold, tanda **, tabel markdown, atau format yang terlalu ramai.',
+      'Jangan menulis label speaker seperti "Bot:", "AI:", "Admin:", atau nama assistant di dalam jawaban.',
+      'Jangan meminta user mengirim bukti transfer, screenshot, foto, atau lampiran pembayaran. Bot belum bisa memverifikasi gambar; arahkan pengecekan pembayaran ke admin bila diperlukan.',
       'Hindari jawaban panjang bertele-tele. Buat singkat, jelas, dan langsung ke inti.',
       'Perhatikan riwayat chat agar jawaban tetap nyambung dengan percakapan sebelumnya.',
       'Jangan tambahkan footer sumber, referensi dokumen, atau tulisan "Sumber:" di jawaban ke user.',
       'Jangan mengarang kebijakan, harga, atau fakta yang tidak ada di konteks.',
     ].join(' ');
+  }
+
+  private cleanGeneratedAnswer(answer: string, config: RagConfigValues) {
+    const assistantName = config.assistantName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const speakerOnlyPattern = new RegExp(
+      `^(?:${assistantName ? `${assistantName}|` : ''}bot|ai|ai preview|admin)\\s*:?\\s*$`,
+      'i',
+    );
+
+    return answer
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .filter((line) => !speakerOnlyPattern.test(line.trim()))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   private toDebugMatches(matches: RagMatch[]) {
@@ -839,7 +873,7 @@ export class RagService {
             },
             {
               role: 'user',
-              content: `Riwayat chat:\n${historySnippet || '-'}\n\nPertanyaan terbaru:\n${effectiveQuestion}\n\nIntent terdeteksi: ${detectedIntents.join(', ') || '-'}\nAction terpilih: ${route.action?.key || '-'}\nFlow data yang sudah terkumpul: ${JSON.stringify(collectedFlowData)}\n\nKonteks knowledge:\n${context}`,
+              content: `Riwayat chat:\n${historySnippet || '-'}\n\nPertanyaan terbaru:\n${effectiveQuestion}\n\nIntent terdeteksi: ${detectedIntents.join(', ') || '-'}\nAction terpilih: ${route.action?.key || '-'}\nPembuka opsional bila natural: ${route.action?.messageTemplate || '-'}\nFlow data yang sudah terkumpul: ${JSON.stringify(collectedFlowData)}\n\nKonteks knowledge:\n${context}`,
             },
           ],
         }),
@@ -878,10 +912,7 @@ export class RagService {
       answer = answer.replace(/\*\*/g, '').replace(/\*/g, '');
       answer = answer.replace(/\|/g, ' ');
       answer = answer.replace(/\n?\s*Sumber\s*:[\s\S]*$/i, '').trim();
-
-      if (route.action?.messageTemplate && route.action.type === 'answer_from_knowledge') {
-        answer = `${route.action.messageTemplate}\n\n${answer}`;
-      }
+      answer = this.cleanGeneratedAnswer(answer, flowConfig);
 
       if (menuSelection?.reply) {
         answer = `${menuSelection.reply}\n\n${answer}`;

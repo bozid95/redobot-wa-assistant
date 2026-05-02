@@ -742,9 +742,9 @@ const knowledgeSections = reactive([
   {
     key: 'booking',
     title: 'Cara Daftar atau Booking',
-    help: 'Alur booking tiap bisnis. Isi bagian ini dipakai AI untuk menjawab pertanyaan daftar, booking, reservasi, atau jadwal.',
+    help: 'Alur booking tiap bisnis, termasuk cara bayar bila memang bagian dari proses daftar.',
     content: '',
-    placeholder: 'Contoh:\n1. Pilih paket yang diinginkan.\n2. Booking bisa lewat link website atau chat admin.\n3. Admin konfirmasi ketersediaan jadwal.\n4. Ikuti instruksi pembayaran bila diperlukan.',
+    placeholder: 'Contoh:\n1. Pilih paket yang diinginkan.\n2. Booking bisa lewat link website atau chat admin.\n3. Admin konfirmasi ketersediaan jadwal.\n4. Pembayaran dilakukan setelah admin mengonfirmasi paket dan jadwal.\n5. Admin akan mengirim instruksi pembayaran secara manual bila diperlukan.\n\nCatatan: bot tidak perlu meminta bukti transfer, screenshot, foto, atau lampiran.',
     group: 'primary',
   },
 ]) as KnowledgeSection[]

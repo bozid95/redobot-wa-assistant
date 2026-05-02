@@ -265,7 +265,7 @@ export class WebhooksService {
     }
 
     if (conversation.paymentRequested && !conversation.paymentProofReceived && this.looksLikePaymentProof(question, message)) {
-      const confirmationReply = 'Siap kak, bukti bayar sudah saya terima dan data kakak sudah kami simpan. Admin akan lanjut cek pembayaran dan menghubungi kakak untuk konfirmasi berikutnya ya.';
+      const confirmationReply = 'Siap kak, info pembayaran sudah saya teruskan ke admin. Admin akan cek pembayaran secara manual dan menghubungi kakak untuk konfirmasi berikutnya ya.';
       const responsePayload = await this.whatsappService.sendText(tenantId, phone, confirmationReply);
       const responseMessageId = this.whatsappService.extractMessageId(responsePayload);
       await this.prisma.conversation.update({

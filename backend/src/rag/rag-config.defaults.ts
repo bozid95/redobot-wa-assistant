@@ -144,7 +144,7 @@ export function getDefaultRagConfig(): RagConfigValues {
       'Jawab hanya berdasarkan konteks yang diberikan, singkat, jelas, dan tetap menggiring lead ke langkah berikutnya.',
     ].join(' '),
     paymentPrompt:
-      'Ambil instruksi pembayaran dari konteks. Tulis singkat, rapi, dan minta user mengirim bukti bayar ke chat ini jika sudah transfer.',
+      'Ambil instruksi pembayaran dari konteks. Tulis singkat dan rapi. Jangan meminta user mengirim bukti transfer, screenshot, foto, atau lampiran karena bot belum memverifikasi gambar. Jika perlu konfirmasi pembayaran, arahkan agar admin melakukan pengecekan manual.',
     scoreThreshold: Number(process.env.RAG_SCORE_THRESHOLD || process.env.QDRANT_SCORE_THRESHOLD || 0.3),
     topK: Number(process.env.RAG_TOP_K || 5),
     maxChunks: Number(process.env.RAG_MAX_CONTEXT_CHUNKS || 3),
