@@ -9,7 +9,7 @@
             <div class="flex flex-wrap items-center gap-3">
               <h3 class="text-xl font-semibold text-gray-800 dark:text-white/90">Tenant Management</h3>
               <span class="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
-                {{ tenants.length }} Tenants
+                {{ pagination.total }} Tenants
               </span>
             </div>
             <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
@@ -60,7 +60,9 @@
                 v-model="search"
                 class="h-11 w-full rounded-xl border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90 sm:w-80"
                 placeholder="Cari nama tenant atau slug"
+                @keyup.enter="applySearch"
               />
+              <Button variant="outline" @click="applySearch">Cari</Button>
             </div>
           </div>
         </div>
@@ -82,13 +84,13 @@
                   Memuat tenant...
                 </td>
               </tr>
-              <tr v-else-if="!filteredTenants.length">
+              <tr v-else-if="!tenants.length">
                 <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
                   Tidak ada tenant yang cocok dengan pencarian saat ini.
                 </td>
               </tr>
               <tr
-                v-for="item in filteredTenants"
+                v-for="item in tenants"
                 :key="item.id"
                 class="border-t border-gray-200 dark:border-gray-800"
               >
@@ -118,6 +120,13 @@
             </tbody>
           </table>
         </div>
+        <div class="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+          <span>Halaman {{ pagination.page }} dari {{ pagination.totalPages }} · {{ pagination.total }} tenant</span>
+          <div class="flex gap-2">
+            <Button size="sm" variant="outline" :disabled="loading || !pagination.hasPrev" @click="goToPage(pagination.page - 1)">Prev</Button>
+            <Button size="sm" variant="outline" :disabled="loading || !pagination.hasNext" @click="goToPage(pagination.page + 1)">Next</Button>
+          </div>
+        </div>
       </section>
     </div>
   </admin-layout>
@@ -129,6 +138,7 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import { apiFetch } from '@/lib/api'
+import { defaultPagination, type PaginatedResponse, type PaginationMeta } from '@/lib/pagination'
 
 type TenantItem = {
   id: number
@@ -143,18 +153,8 @@ const loading = ref(false)
 const flashError = ref('')
 const search = ref('')
 const tenants = ref<TenantItem[]>([])
-
-const filteredTenants = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return tenants.value
-
-  return tenants.value.filter((item) => {
-    return (
-      item.name.toLowerCase().includes(keyword) ||
-      item.slug.toLowerCase().includes(keyword)
-    )
-  })
-})
+const page = ref(1)
+const pagination = ref<PaginationMeta>(defaultPagination(10))
 
 const totalUsersCount = computed(() =>
   tenants.value.reduce((sum, item) => sum + item.users.length, 0),
@@ -175,12 +175,28 @@ async function loadTenants() {
   flashError.value = ''
 
   try {
-    tenants.value = await apiFetch<TenantItem[]>('/tenants')
+    const params = new URLSearchParams()
+    if (search.value.trim()) params.set('search', search.value.trim())
+    params.set('page', String(page.value))
+    params.set('limit', String(pagination.value.limit))
+    const response = await apiFetch<PaginatedResponse<TenantItem>>(`/tenants?${params.toString()}`)
+    tenants.value = response.items
+    pagination.value = response.pagination
   } catch (error) {
     flashError.value = error instanceof Error ? error.message : 'Gagal memuat data tenant'
   } finally {
     loading.value = false
   }
+}
+
+async function applySearch() {
+  page.value = 1
+  await loadTenants()
+}
+
+async function goToPage(nextPage: number) {
+  page.value = Math.max(1, nextPage)
+  await loadTenants()
 }
 
 onMounted(loadTenants)

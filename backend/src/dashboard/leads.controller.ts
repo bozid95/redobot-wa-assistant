@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseIntPipe, Patch, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Patch, Query, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { AuthGuard } from '../common/auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -10,8 +10,12 @@ export class LeadsController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get()
-  async list(@CurrentUser() user: SessionPayload) {
-    return this.dashboardService.listLeads(user);
+  async list(
+    @CurrentUser() user: SessionPayload,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.dashboardService.listLeads(user, { page, limit });
   }
 
   @Patch(':id/close')

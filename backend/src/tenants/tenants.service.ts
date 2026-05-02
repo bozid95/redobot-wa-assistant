@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildTenantInstanceName, slugifyTenantName } from '../common/tenant.util';
+import { hasPaginationQuery, paginated, PaginationQuery, sanitizePagination } from '../common/pagination.util';
 
 @Injectable()
 export class TenantsService {
@@ -34,8 +36,18 @@ export class TenantsService {
     throw new BadRequestException('Instance WhatsApp tenant tidak tersedia');
   }
 
-  async list() {
-    return this.prisma.tenant.findMany({
+  async list(query: PaginationQuery & { search?: string } = {}) {
+    const search = String(query.search || '').trim();
+    const where: Prisma.TenantWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { slug: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+    const findQuery: Prisma.TenantFindManyArgs = {
+      where,
       orderBy: { createdAt: 'asc' },
       include: {
         users: {
@@ -65,7 +77,19 @@ export class TenantsService {
           },
         },
       },
-    });
+    };
+
+    if (!hasPaginationQuery(query)) {
+      return this.prisma.tenant.findMany(findQuery);
+    }
+
+    const { page, limit, skip, take } = sanitizePagination(query, 10);
+    const [total, items] = await Promise.all([
+      this.prisma.tenant.count({ where }),
+      this.prisma.tenant.findMany({ ...findQuery, skip, take }),
+    ]);
+
+    return paginated(items, total, page, limit);
   }
 
   async getById(id: number) {

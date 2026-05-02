@@ -5,11 +5,11 @@
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
         <p class="text-sm text-gray-500 dark:text-gray-400">Total articles</p>
-        <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ articles.length }}</p>
+        <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ pagination.total }}</p>
       </div>
       <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
         <p class="text-sm text-gray-500 dark:text-gray-400">Search result</p>
-        <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ filteredArticles.length }}</p>
+        <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ pagination.total }}</p>
       </div>
       <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
         <p class="text-sm text-gray-500 dark:text-gray-400">Status</p>
@@ -41,8 +41,10 @@
                 type="text"
                 placeholder="Cari judul atau isi"
                 class="h-11 w-full rounded-lg border border-gray-300 bg-transparent pr-4 pl-10 text-sm text-gray-800 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                @keyup.enter="applySearch"
               />
             </div>
+            <Button size="sm" variant="outline" :loading="pending" @click="applySearch">Cari</Button>
             <Button size="sm" variant="outline" :startIcon="RefreshCw" :loading="pending" @click="reindexAll">Reindex</Button>
           </div>
         </div>
@@ -67,7 +69,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
-            <tr v-for="article in filteredArticles" :key="article.id">
+            <tr v-for="article in articles" :key="article.id">
               <td class="px-5 py-4 align-top sm:px-6">
                 <div class="min-w-[280px] max-w-[520px]">
                   <p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ article.title }}</p>
@@ -89,13 +91,20 @@
                 </div>
               </td>
             </tr>
-            <tr v-if="!filteredArticles.length">
+            <tr v-if="!articles.length">
               <td colspan="4" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400 sm:px-6">
                 Tidak ada artikel yang cocok.
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="flex flex-col gap-3 border-t border-gray-200 px-5 py-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <span>Halaman {{ pagination.page }} dari {{ pagination.totalPages }} · {{ pagination.total }} artikel</span>
+        <div class="flex gap-2">
+          <Button size="sm" variant="outline" :disabled="pending || !pagination.hasPrev" @click="goToPage(pagination.page - 1)">Prev</Button>
+          <Button size="sm" variant="outline" :disabled="pending || !pagination.hasNext" @click="goToPage(pagination.page + 1)">Next</Button>
+        </div>
       </div>
     </section>
 
@@ -112,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { Plus, RefreshCw, Search } from 'lucide-vue-next'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
@@ -121,6 +130,7 @@ import Badge from '@/components/ui/Badge.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { apiFetch } from '@/lib/api'
 import { useToast } from '@/composables/useToast'
+import { defaultPagination, type PaginatedResponse, type PaginationMeta } from '@/lib/pagination'
 
 type KnowledgeArticle = {
   id: number
@@ -133,13 +143,21 @@ type KnowledgeArticle = {
 
 const articles = ref<KnowledgeArticle[]>([])
 const search = ref('')
+const page = ref(1)
+const pagination = ref<PaginationMeta>(defaultPagination(10))
 const pending = ref(false)
 const toast = useToast()
 const deleteTargetId = ref<number | null>(null)
 
 async function loadData() {
   try {
-    articles.value = await apiFetch<KnowledgeArticle[]>('/knowledge')
+    const params = new URLSearchParams()
+    if (search.value.trim()) params.set('search', search.value.trim())
+    params.set('page', String(page.value))
+    params.set('limit', String(pagination.value.limit))
+    const response = await apiFetch<PaginatedResponse<KnowledgeArticle>>(`/knowledge?${params.toString()}`)
+    articles.value = response.items
+    pagination.value = response.pagination
   } catch (error) {
     toast.notify({
       kind: 'error',
@@ -147,6 +165,16 @@ async function loadData() {
       message: error instanceof Error ? error.message : 'Coba refresh halaman.',
     })
   }
+}
+
+async function applySearch() {
+  page.value = 1
+  await loadData()
+}
+
+async function goToPage(nextPage: number) {
+  page.value = Math.max(1, nextPage)
+  await loadData()
 }
 
 async function removeArticle(id: number) {
@@ -214,16 +242,6 @@ function updatedLabel(article: KnowledgeArticle) {
   if (!value) return 'No update info'
   return `Updated ${new Date(value).toLocaleString()}`
 }
-
-const filteredArticles = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return articles.value
-
-  return articles.value.filter((article) => {
-    const haystack = `${article.title} ${stripHtml(article.content)}`.toLowerCase()
-    return haystack.includes(keyword)
-  })
-})
 
 onMounted(loadData)
 </script>

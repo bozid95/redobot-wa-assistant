@@ -14,8 +14,10 @@ export class ConversationsController {
     @CurrentUser() user: SessionPayload,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.conversationsService.list(user, status, search);
+    return this.conversationsService.list(user, status, search, { page, limit });
   }
 
   @Get(':id')

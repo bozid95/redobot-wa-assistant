@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { paginated, PaginationQuery, sanitizePagination } from '../common/pagination.util';
 
 type KnowledgeArticleInput = {
   title: string;
@@ -33,6 +35,34 @@ export class KnowledgeService {
       where: { tenantId },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  async listPaginated(tenantId: number, query: PaginationQuery & { search?: string } = {}) {
+    const search = String(query.search || '').trim();
+    const where: Prisma.KnowledgeSourceWhereInput = {
+      tenantId,
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' as const } },
+              { content: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const findQuery: Prisma.KnowledgeSourceFindManyArgs = {
+      where,
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+    };
+
+    const { page, limit, skip, take } = sanitizePagination(query, 10);
+    const [total, items] = await Promise.all([
+      this.prisma.knowledgeSource.count({ where }),
+      this.prisma.knowledgeSource.findMany({ ...findQuery, skip, take }),
+    ]);
+
+    return paginated(items, total, page, limit);
   }
 
   async getById(tenantId: number, id: number) {

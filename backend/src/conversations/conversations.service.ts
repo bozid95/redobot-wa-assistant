@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { SessionPayload } from '../common/auth.guard';
+import { hasPaginationQuery, paginated, PaginationQuery, sanitizePagination } from '../common/pagination.util';
 
 @Injectable()
 export class ConversationsService {
@@ -14,20 +16,22 @@ export class ConversationsService {
     return user.tenantId ?? 0;
   }
 
-  async list(user: SessionPayload, status?: string, search?: string) {
-    return this.prisma.conversation.findMany({
-      where: {
-        tenantId: this.getTenantId(user),
-        ...(status ? { status: status as any } : {}),
-        ...(search
-          ? {
-              OR: [
-                { phone: { contains: search } },
-                { customerName: { contains: search, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
+  async list(user: SessionPayload, status?: string, search?: string, pagination: PaginationQuery = {}) {
+    const where: Prisma.ConversationWhereInput = {
+      tenantId: this.getTenantId(user),
+      ...(status ? { status: status as any } : {}),
+      ...(search
+        ? {
+            OR: [
+              { phone: { contains: search } },
+              { customerName: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const query: Prisma.ConversationFindManyArgs = {
+      where,
       orderBy: { lastMessageAt: 'desc' },
       include: {
         tenant: {
@@ -38,7 +42,19 @@ export class ConversationsService {
           orderBy: { createdAt: 'desc' },
         },
       },
-    });
+    };
+
+    if (!hasPaginationQuery(pagination)) {
+      return this.prisma.conversation.findMany(query);
+    }
+
+    const { page, limit, skip, take } = sanitizePagination(pagination, 10);
+    const [total, items] = await Promise.all([
+      this.prisma.conversation.count({ where }),
+      this.prisma.conversation.findMany({ ...query, skip, take }),
+    ]);
+
+    return paginated(items, total, page, limit);
   }
 
   async getOne(user: SessionPayload, id: number) {

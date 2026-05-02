@@ -6,14 +6,14 @@
       <section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
           <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Total Percakapan</p>
-          <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ conversations.length }}</p>
+          <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ pagination.total }}</p>
         </div>
         <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
-          <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Open</p>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Open Halaman Ini</p>
           <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ statusCount.open }}</p>
         </div>
         <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
-          <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Takeover</p>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Takeover Halaman Ini</p>
           <p class="mt-3 text-2xl font-semibold text-gray-800 dark:text-white/90">{{ statusCount.takeover }}</p>
         </div>
       </section>
@@ -123,6 +123,13 @@
             </tbody>
           </table>
         </div>
+        <div class="flex flex-col gap-3 border-t border-gray-200 px-5 py-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <span>Halaman {{ pagination.page }} dari {{ pagination.totalPages }} · {{ pagination.total }} percakapan</span>
+          <div class="flex gap-2">
+            <Button size="sm" variant="outline" :disabled="loading || !pagination.hasPrev" @click="goToPage(pagination.page - 1)">Prev</Button>
+            <Button size="sm" variant="outline" :disabled="loading || !pagination.hasNext" @click="goToPage(pagination.page + 1)">Next</Button>
+          </div>
+        </div>
       </section>
     </div>
   </admin-layout>
@@ -137,6 +144,7 @@ import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { apiFetch } from '@/lib/api'
+import { defaultPagination, type PaginatedResponse, type PaginationMeta } from '@/lib/pagination'
 
 type Message = { id: number; message: string; role?: string; createdAt?: string; created_at?: string }
 type Conversation = {
@@ -154,7 +162,9 @@ const route = useRoute()
 const router = useRouter()
 const search = ref(String(route.query.search || ''))
 const status = ref(String(route.query.status || ''))
+const page = ref(Number(route.query.page || 1))
 const conversations = ref<Conversation[]>([])
+const pagination = ref<PaginationMeta>(defaultPagination(10))
 const loading = ref(false)
 
 const statusCount = computed(() => ({
@@ -168,19 +178,38 @@ async function loadData() {
     const params = new URLSearchParams()
     if (search.value) params.set('search', search.value)
     if (status.value) params.set('status', status.value)
+    params.set('page', String(page.value))
+    params.set('limit', String(pagination.value.limit))
     const suffix = params.toString() ? `?${params.toString()}` : ''
-    conversations.value = await apiFetch<Conversation[]>(`/conversations${suffix}`)
+    const response = await apiFetch<PaginatedResponse<Conversation>>(`/conversations${suffix}`)
+    conversations.value = response.items
+    pagination.value = response.pagination
   } finally {
     loading.value = false
   }
 }
 
 async function applyFilters() {
+  page.value = 1
   await router.replace({
     path: '/inbox',
     query: {
       search: search.value || undefined,
       status: status.value || undefined,
+      page: page.value > 1 ? String(page.value) : undefined,
+    },
+  })
+  await loadData()
+}
+
+async function goToPage(nextPage: number) {
+  page.value = Math.max(1, nextPage)
+  await router.replace({
+    path: '/inbox',
+    query: {
+      search: search.value || undefined,
+      status: status.value || undefined,
+      page: page.value > 1 ? String(page.value) : undefined,
     },
   })
   await loadData()

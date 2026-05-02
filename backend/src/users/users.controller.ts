@@ -12,8 +12,13 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  async list(@Query('tenantId') tenantId?: string) {
-    return this.usersService.list(tenantId ? Number(tenantId) : undefined);
+  async list(
+    @Query('tenantId') tenantId?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.usersService.list(tenantId ? Number(tenantId) : undefined, { search, page, limit });
   }
 
   @Get(':id')

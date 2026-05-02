@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { hashSync } from 'bcryptjs';
+import { hasPaginationQuery, paginated, PaginationQuery, sanitizePagination } from '../common/pagination.util';
 
 type CreateUserInput = {
   email: string;
@@ -31,16 +32,40 @@ export class UsersService {
     return tenant;
   }
 
-  async list(tenantId?: number) {
-    return this.prisma.appUser.findMany({
-      where: tenantId ? { tenantId } : undefined,
+  async list(tenantId?: number, query: PaginationQuery & { search?: string } = {}) {
+    const search = String(query.search || '').trim();
+    const where: Prisma.AppUserWhereInput = {
+      ...(tenantId ? { tenantId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { email: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+    const findQuery: Prisma.AppUserFindManyArgs = {
+      where,
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
       include: {
         tenant: {
           select: { id: true, name: true, slug: true },
         },
       },
-    });
+    };
+
+    if (!hasPaginationQuery(query)) {
+      return this.prisma.appUser.findMany(findQuery);
+    }
+
+    const { page, limit, skip, take } = sanitizePagination(query, 10);
+    const [total, items] = await Promise.all([
+      this.prisma.appUser.count({ where }),
+      this.prisma.appUser.findMany({ ...findQuery, skip, take }),
+    ]);
+
+    return paginated(items, total, page, limit);
   }
 
   async getById(id: number) {

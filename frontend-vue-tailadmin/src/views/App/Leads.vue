@@ -66,6 +66,13 @@
           </tbody>
         </table>
       </div>
+      <div class="flex flex-col gap-3 border-t border-gray-200 px-5 py-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <span>Halaman {{ pagination.page }} dari {{ pagination.totalPages }} · {{ pagination.total }} lead</span>
+        <div class="flex gap-2">
+          <Button size="sm" variant="outline" :disabled="loading || !pagination.hasPrev" @click="goToPage(pagination.page - 1)">Prev</Button>
+          <Button size="sm" variant="outline" :disabled="loading || !pagination.hasNext" @click="goToPage(pagination.page + 1)">Next</Button>
+        </div>
+      </div>
     </div>
   </admin-layout>
 </template>
@@ -79,6 +86,7 @@ import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { apiFetch } from '@/lib/api'
 import { useToast } from '@/composables/useToast'
+import { defaultPagination, type PaginatedResponse, type PaginationMeta } from '@/lib/pagination'
 
 type Lead = {
   id: number
@@ -90,6 +98,8 @@ type Lead = {
 
 const leads = ref<Lead[]>([])
 const loading = ref(false)
+const page = ref(1)
+const pagination = ref<PaginationMeta>(defaultPagination(10))
 const toast = useToast()
 
 function trainingLink(lead: Lead) {
@@ -108,7 +118,13 @@ function trainingLink(lead: Lead) {
 async function loadData() {
   loading.value = true
   try {
-    leads.value = await apiFetch<Lead[]>('/leads')
+    const params = new URLSearchParams({
+      page: String(page.value),
+      limit: String(pagination.value.limit),
+    })
+    const response = await apiFetch<PaginatedResponse<Lead>>(`/leads?${params.toString()}`)
+    leads.value = response.items
+    pagination.value = response.pagination
   } catch (error) {
     toast.notify({
       kind: 'error',
@@ -118,6 +134,11 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+async function goToPage(nextPage: number) {
+  page.value = Math.max(1, nextPage)
+  await loadData()
 }
 
 async function closeLead(id: number) {

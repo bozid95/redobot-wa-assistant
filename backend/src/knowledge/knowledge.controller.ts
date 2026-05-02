@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { KnowledgeService } from './knowledge.service';
 import { AuthGuard } from '../common/auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { SessionPayload } from '../common/auth.guard';
+import { hasPaginationQuery } from '../common/pagination.util';
 
 @Controller('knowledge')
 @UseGuards(AuthGuard)
@@ -10,7 +11,17 @@ export class KnowledgeController {
   constructor(private readonly knowledgeService: KnowledgeService) {}
 
   @Get()
-  async list(@CurrentUser() user: SessionPayload) {
+  async list(
+    @CurrentUser() user: SessionPayload,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const query = { search, page, limit };
+    if (hasPaginationQuery(query)) {
+      return this.knowledgeService.listPaginated(user.tenantId ?? 0, query);
+    }
+
     return this.knowledgeService.list(user.tenantId ?? 0);
   }
 

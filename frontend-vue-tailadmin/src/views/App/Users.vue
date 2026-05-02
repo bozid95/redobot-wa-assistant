@@ -9,7 +9,7 @@
             <div class="flex flex-wrap items-center gap-3">
               <h3 class="text-xl font-semibold text-gray-800 dark:text-white/90">User Management</h3>
               <span class="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
-                {{ users.length }} Users
+                {{ pagination.total }} Users
               </span>
             </div>
             <p class="mt-2 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
@@ -60,16 +60,19 @@
                 v-model="search"
                 class="h-11 w-full rounded-xl border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90 sm:w-72"
                 placeholder="Cari nama atau email"
+                @keyup.enter="applyFilters"
               />
               <select
                 v-model.number="selectedTenantId"
                 class="h-11 rounded-xl border border-gray-300 bg-transparent px-4 text-sm text-gray-800 outline-none focus:border-brand-500 dark:border-gray-700 dark:text-white/90"
+                @change="applyFilters"
               >
                 <option :value="0">Semua tenant</option>
                 <option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">
                   {{ tenant.name }}
                 </option>
               </select>
+              <Button variant="outline" @click="applyFilters">Cari</Button>
             </div>
           </div>
         </div>
@@ -92,13 +95,13 @@
                   Memuat user...
                 </td>
               </tr>
-              <tr v-else-if="!filteredUsers.length">
+              <tr v-else-if="!users.length">
                 <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
                   Tidak ada user yang cocok dengan filter saat ini.
                 </td>
               </tr>
               <tr
-                v-for="item in filteredUsers"
+                v-for="item in users"
                 :key="item.id"
                 class="border-t border-gray-200 dark:border-gray-800"
               >
@@ -149,6 +152,13 @@
             </tbody>
           </table>
         </div>
+        <div class="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+          <span>Halaman {{ pagination.page }} dari {{ pagination.totalPages }} · {{ pagination.total }} user</span>
+          <div class="flex gap-2">
+            <Button size="sm" variant="outline" :disabled="loading || !pagination.hasPrev" @click="goToPage(pagination.page - 1)">Prev</Button>
+            <Button size="sm" variant="outline" :disabled="loading || !pagination.hasNext" @click="goToPage(pagination.page + 1)">Next</Button>
+          </div>
+        </div>
       </section>
     </div>
   </admin-layout>
@@ -160,6 +170,7 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import Button from '@/components/ui/Button.vue'
 import { apiFetch } from '@/lib/api'
+import { defaultPagination, type PaginatedResponse, type PaginationMeta } from '@/lib/pagination'
 
 type TenantOption = {
   id: number
@@ -184,20 +195,8 @@ const tenants = ref<TenantOption[]>([])
 const users = ref<UserItem[]>([])
 const search = ref('')
 const selectedTenantId = ref(0)
-
-const filteredUsers = computed(() => {
-  const keyword = search.value.trim().toLowerCase()
-
-  return users.value.filter((item) => {
-    const matchTenant = selectedTenantId.value === 0 || item.tenantId === selectedTenantId.value
-    const matchKeyword =
-      !keyword ||
-      item.name.toLowerCase().includes(keyword) ||
-      item.email.toLowerCase().includes(keyword)
-
-    return matchTenant && matchKeyword
-  })
-})
+const page = ref(1)
+const pagination = ref<PaginationMeta>(defaultPagination(10))
 
 const activeUsersCount = computed(() => users.value.filter((item) => item.isActive).length)
 type UserRole = 'platform_admin' | 'tenant_admin' | 'tenant_staff'
@@ -218,11 +217,47 @@ async function bootstrap() {
   try {
     const [tenantData, userData] = await Promise.all([
       apiFetch<TenantOption[]>('/tenants'),
-      apiFetch<UserItem[]>('/users'),
+      loadUsers(),
     ])
 
     tenants.value = tenantData
-    users.value = userData
+  } catch (error) {
+    flashError.value = error instanceof Error ? error.message : 'Gagal memuat data user'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadUsers() {
+  const params = new URLSearchParams()
+  if (selectedTenantId.value) params.set('tenantId', String(selectedTenantId.value))
+  if (search.value.trim()) params.set('search', search.value.trim())
+  params.set('page', String(page.value))
+  params.set('limit', String(pagination.value.limit))
+  const response = await apiFetch<PaginatedResponse<UserItem>>(`/users?${params.toString()}`)
+  users.value = response.items
+  pagination.value = response.pagination
+}
+
+async function applyFilters() {
+  page.value = 1
+  loading.value = true
+  flashError.value = ''
+  try {
+    await loadUsers()
+  } catch (error) {
+    flashError.value = error instanceof Error ? error.message : 'Gagal memuat data user'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function goToPage(nextPage: number) {
+  page.value = Math.max(1, nextPage)
+  loading.value = true
+  flashError.value = ''
+  try {
+    await loadUsers()
   } catch (error) {
     flashError.value = error instanceof Error ? error.message : 'Gagal memuat data user'
   } finally {
