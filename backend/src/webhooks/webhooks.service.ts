@@ -19,6 +19,20 @@ export class WebhooksService {
     return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
   }
 
+  private get historyLimit() {
+    const parsed = Number(process.env.RAG_HISTORY_LIMIT || 12);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.round(parsed), 50) : 12;
+  }
+
+  private get contextWindowHours() {
+    const parsed = Number(process.env.RAG_CONTEXT_WINDOW_HOURS || 24);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 24;
+  }
+
+  private get contextWindowStart() {
+    return new Date(Date.now() - this.contextWindowHours * 60 * 60 * 1000);
+  }
+
   private readonly leadIntentPatterns: Record<IntentKey, RegExp[]> = {
     price: [/\b(harga|biaya|tarif|ongkos|bayar|dp|pembayaran)\b/i],
     requirement: [/\b(syarat|persyaratan|dokumen|berkas|ktp|minimal umur|usia)\b/i],
@@ -65,6 +79,86 @@ export class WebhooksService {
     return hasMedia || /\b(sudah transfer|sudah bayar|bukti bayar|bukti transfer|transfer ya|saya transfer)\b/i.test(lower);
   }
 
+  private async handleManualOutgoingMessage(input: {
+    tenantId: number;
+    phone: string;
+    messageId: string;
+    message: string;
+    pushName: string | null;
+  }) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: {
+        tenantId_phone: {
+          tenantId: input.tenantId,
+          phone: input.phone,
+        },
+      },
+    });
+
+    if (!conversation) {
+      return { ignored: true, reason: 'manual_outgoing_without_conversation' };
+    }
+
+    const knownOutbound = await this.prisma.conversationMessage.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        phone: input.phone,
+        messageId: input.messageId,
+        role: { in: ['assistant', 'admin'] },
+      },
+      select: { id: true },
+    });
+
+    if (knownOutbound) {
+      return { ignored: true, reason: 'known_api_outbound' };
+    }
+
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        takeoverEnabled: true,
+        status: 'takeover',
+        lastMessageAt: new Date(),
+      },
+    });
+
+    await this.prisma.conversationMessage.create({
+      data: {
+        tenantId: input.tenantId,
+        conversationId: conversation.id,
+        phone: input.phone,
+        role: 'admin',
+        source: 'evolution',
+        message: input.message,
+        messageId: input.messageId,
+        metadata: this.toJsonValue({
+          auto_takeover: true,
+          from_me: true,
+          push_name: input.pushName,
+        }),
+      },
+    });
+
+    if (!conversation.takeoverEnabled) {
+      await this.prisma.conversationMessage.create({
+        data: {
+          tenantId: input.tenantId,
+          conversationId: conversation.id,
+          phone: input.phone,
+          role: 'system',
+          source: 'takeover',
+          message: 'Takeover otomatis aktif karena admin membalas manual dari WhatsApp.',
+          metadata: this.toJsonValue({
+            auto_takeover: true,
+            trigger_message_id: input.messageId,
+          }),
+        },
+      });
+    }
+
+    return { ok: true, mode: 'manual-wa-auto-takeover' };
+  }
+
   async handleEvolutionWebhook(input: any, routeInstanceName?: string) {
     const payload = input?.body ?? input ?? {};
     const data = payload.data ?? payload;
@@ -97,7 +191,7 @@ export class WebhooksService {
     const normalizedText = question.replace(/\s+/g, ' ').toLowerCase();
     const pushName = String(data.pushName ?? payload.pushName ?? '').trim() || null;
 
-    if (fromMe || isGroup || !phone || !messageId || !question) {
+    if (isGroup || !phone || !messageId || !question) {
       return { ignored: true };
     }
 
@@ -114,6 +208,16 @@ export class WebhooksService {
       });
     } catch {
       return { deduplicated: true };
+    }
+
+    if (fromMe) {
+      return this.handleManualOutgoingMessage({
+        tenantId,
+        phone,
+        messageId,
+        message: question,
+        pushName,
+      });
     }
 
     const intents = this.detectIntents(question);
@@ -163,6 +267,7 @@ export class WebhooksService {
     if (conversation.paymentRequested && !conversation.paymentProofReceived && this.looksLikePaymentProof(question, message)) {
       const confirmationReply = 'Siap kak, bukti bayar sudah saya terima dan data kakak sudah kami simpan. Admin akan lanjut cek pembayaran dan menghubungi kakak untuk konfirmasi berikutnya ya.';
       const responsePayload = await this.whatsappService.sendText(tenantId, phone, confirmationReply);
+      const responseMessageId = this.whatsappService.extractMessageId(responsePayload);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -180,6 +285,7 @@ export class WebhooksService {
           role: 'assistant',
           source: 'rag',
           message: confirmationReply,
+          messageId: responseMessageId || undefined,
           metadata: this.toJsonValue({
             payment_proof_received: true,
             transport: responsePayload,
@@ -193,9 +299,12 @@ export class WebhooksService {
       where: {
         tenantId,
         conversationId: conversation.id,
+        createdAt: {
+          gte: this.contextWindowStart,
+        },
       },
       orderBy: { createdAt: 'desc' },
-      take: 12,
+      take: this.historyLimit,
     });
 
     const history = recentMessages
@@ -217,6 +326,7 @@ export class WebhooksService {
 
     if (ragResult.action === 'answer') {
       const responsePayload = await this.whatsappService.sendText(tenantId, phone, ragResult.reply);
+      const responseMessageId = this.whatsappService.extractMessageId(responsePayload);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -235,6 +345,7 @@ export class WebhooksService {
           role: 'assistant',
           source: ragResult.source,
           message: ragResult.reply,
+          messageId: responseMessageId || undefined,
           metadata: this.toJsonValue({
             ...ragResult.metadata,
             transport: responsePayload,
@@ -245,6 +356,7 @@ export class WebhooksService {
     }
 
     const responsePayload = await this.whatsappService.sendText(tenantId, phone, ragResult.reply);
+    const responseMessageId = this.whatsappService.extractMessageId(responsePayload);
     await this.prisma.unansweredLead.create({
       data: {
         tenantId,
@@ -275,6 +387,7 @@ export class WebhooksService {
         role: 'assistant',
         source: 'fallback',
         message: ragResult.reply,
+        messageId: responseMessageId || undefined,
         metadata: this.toJsonValue({
           ...ragResult.metadata,
           transport: responsePayload,

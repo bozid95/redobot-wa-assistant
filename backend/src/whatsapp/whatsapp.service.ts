@@ -52,6 +52,19 @@ export class WhatsappService {
     return json;
   }
 
+  extractMessageId(payload: unknown) {
+    const value = payload as any;
+    return String(
+      value?.key?.id ??
+        value?.message?.key?.id ??
+        value?.data?.key?.id ??
+        value?.data?.message?.key?.id ??
+        value?.id ??
+        value?.messageId ??
+        '',
+    ).trim();
+  }
+
   private async getTenantInstanceOrThrow(tenantId: number) {
     let instance = await this.prisma.waInstance.findUnique({
       where: { tenantId },

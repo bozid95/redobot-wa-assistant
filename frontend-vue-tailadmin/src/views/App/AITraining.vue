@@ -135,9 +135,22 @@
               <div>
                 <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Ajarkan Pengetahuan</h3>
                 <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-                  Isi bagian yang paling penting dulu. Bagian opsional bisa dibuka kalau memang dibutuhkan, dan user tetap bisa menambah topik sendiri.
+                  Isi data inti yang paling sering ditanyakan pelanggan, lalu lengkapi topik lain langsung di step ini bila dibutuhkan.
                 </p>
               </div>
+            </div>
+
+            <div class="mt-5">
+              <label class="form-label">Kalimat Pengantar Saat Menjawab dari Pengetahuan</label>
+              <textarea
+                v-model="formatForm.answerPrefix"
+                class="form-textarea"
+                rows="3"
+                placeholder="Contoh: Saya bantu cek informasinya ya kak."
+              />
+              <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                Kalimat ini dipakai sebagai pembuka saat AI menjawab dari data pengetahuan aktif.
+              </p>
             </div>
           </section>
 
@@ -188,56 +201,17 @@
             </div>
           </section>
 
-          <section class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-            <button
-              type="button"
-              class="flex w-full items-center justify-between gap-4 p-5 text-left"
-              @click="optionalKnowledgeOpen = !optionalKnowledgeOpen"
-            >
-              <span>
-                <span class="block text-base font-semibold text-gray-800 dark:text-white/90">Pengetahuan Opsional</span>
-                <span class="mt-1 block text-sm text-gray-500 dark:text-gray-400">Jam, lokasi, pembayaran, dan kebijakan bisa diisi nanti.</span>
-              </span>
-              <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                {{ optionalKnowledgeOpen ? 'Tutup' : 'Buka' }}
-              </span>
-            </button>
-
-            <div v-if="optionalKnowledgeOpen" class="grid grid-cols-1 gap-4 border-t border-gray-200 p-5 dark:border-gray-800 xl:grid-cols-2">
-              <section
-                v-for="section in optionalKnowledgeSections"
-                :key="section.key"
-                class="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-900"
-              >
-                <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <h4 class="font-semibold text-gray-800 dark:text-white/90">{{ section.title }}</h4>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ section.help }}</p>
-                  </div>
-                  <span class="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-500 dark:bg-gray-950/60 dark:text-gray-300">
-                    Opsional
-                  </span>
-                </div>
-                <textarea
-                  v-model="section.content"
-                  class="form-textarea mt-4 min-h-[160px]"
-                  :placeholder="section.placeholder"
-                />
-              </section>
-            </div>
-          </section>
-
           <section class="space-y-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h4 class="text-base font-semibold text-gray-800 dark:text-white/90">Pengetahuan Tambahan</h4>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Tambahkan topik bebas sesuai kebutuhan bisnis.</p>
+                <h4 class="text-base font-semibold text-gray-800 dark:text-white/90">Topik Sendiri</h4>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Tambahkan info lain sesuai kebutuhan bisnis, misalnya jam layanan, lokasi, pembayaran, kebijakan, promo, atau cabang.</p>
               </div>
-              <Button variant="outline" size="sm" @click="addCustomKnowledge">Tambah Pengetahuan Lain</Button>
+              <Button variant="outline" size="sm" @click="addCustomKnowledge">Tambah Topik Sendiri</Button>
             </div>
 
             <p v-if="!customKnowledgeSections.length" class="rounded-2xl border border-dashed border-gray-200 bg-white p-5 text-sm text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400">
-              Belum ada pengetahuan tambahan. Gunakan tombol tambah kalau ada info khusus seperti promo, cabang, syarat layanan, atau hal yang tidak boleh dijanjikan AI.
+              Belum ada topik sendiri. Gunakan tombol tambah kalau ada info khusus yang belum masuk ke form di atas.
             </p>
 
             <section
@@ -247,12 +221,12 @@
             >
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1">
-                  <label class="form-label">Judul Pengetahuan</label>
+                  <label class="form-label">Judul Topik</label>
                   <input v-model="section.title" class="form-input" placeholder="Contoh: Promo Bulan Ini" />
                 </div>
                 <button type="button" class="ghost-btn text-error-600 dark:text-error-400" @click="removeCustomKnowledge(index)">Hapus</button>
               </div>
-              <label class="form-label mt-4">Isi Pengetahuan</label>
+              <label class="form-label mt-4">Isi Topik</label>
               <textarea
                 v-model="section.content"
                 class="form-textarea mt-4 min-h-[180px]"
@@ -269,49 +243,107 @@
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pilih cara AI menyusun jawaban. Pengaturan teknis tetap disembunyikan.</p>
             </div>
 
-            <div class="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <div>
-                <label class="form-label">Panjang Jawaban</label>
-                <select v-model="formatForm.length" class="form-input">
-                  <option value="short">Singkat dan langsung</option>
-                  <option value="medium">Sedang dengan poin penting</option>
-                  <option value="complete">Lengkap tapi tetap rapi</option>
-                </select>
-              </div>
-              <div>
-                <label class="form-label">Gaya Bahasa</label>
-                <select v-model="formatForm.tone" class="form-input">
-                  <option value="friendly">Ramah seperti admin WA</option>
-                  <option value="professional">Profesional dan rapi</option>
-                  <option value="casual">Santai dan dekat</option>
-                </select>
-              </div>
-              <div>
-                <label class="form-label">Struktur Jawaban</label>
-                <select v-model="formatForm.structure" class="form-input">
-                  <option value="opening_details_cta">Pembuka, isi, ajakan lanjut</option>
-                  <option value="direct_bullets_cta">Langsung ke poin, lalu ajakan lanjut</option>
-                  <option value="summary_steps_cta">Ringkasan, langkah, ajakan lanjut</option>
-                </select>
-              </div>
-              <div>
-                <label class="form-label">CTA Penutup</label>
-                <select v-model="formatForm.ctaStyle" class="form-input">
-                  <option value="ask_need">Tanya kebutuhan pelanggan</option>
-                  <option value="invite_booking">Ajak booking/daftar</option>
-                  <option value="offer_admin">Tawarkan bantuan admin</option>
-                </select>
-              </div>
-              <div class="xl:col-span-2">
-                <label class="form-label">Kalimat Pengantar Saat Menjawab dari Knowledge</label>
-                <textarea
-                  v-model="formatForm.answerPrefix"
-                  class="form-textarea"
-                  rows="3"
-                  placeholder="Contoh: Saya bantu cek informasinya ya kak."
-                />
+            <div class="mt-6">
+              <label class="form-label">Pilih Mode Format</label>
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <button
+                  type="button"
+                  :class="[
+                    'format-mode-card',
+                    !formatForm.advancedEnabled
+                      ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-300'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300 dark:hover:bg-gray-900',
+                  ]"
+                  @click="formatForm.advancedEnabled = false"
+                >
+                  <span class="flex items-start justify-between gap-3">
+                    <span class="text-sm font-semibold">Pakai Template</span>
+                    <span :class="['format-mode-badge', !formatForm.advancedEnabled ? 'format-mode-badge-active' : 'format-mode-badge-idle']">
+                      {{ !formatForm.advancedEnabled ? 'Aktif' : 'Tidak aktif' }}
+                    </span>
+                  </span>
+                  <span class="mt-1 block text-sm opacity-75">Pilih gaya, panjang, struktur, dan CTA dari opsi yang sudah disediakan.</span>
+                </button>
+                <button
+                  type="button"
+                  :class="[
+                    'format-mode-card',
+                    formatForm.advancedEnabled
+                      ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-300'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300 dark:hover:bg-gray-900',
+                  ]"
+                  @click="formatForm.advancedEnabled = true"
+                >
+                  <span class="flex items-start justify-between gap-3">
+                    <span class="text-sm font-semibold">Custom Override</span>
+                    <span :class="['format-mode-badge', formatForm.advancedEnabled ? 'format-mode-badge-active' : 'format-mode-badge-idle']">
+                      {{ formatForm.advancedEnabled ? 'Aktif' : 'Tidak aktif' }}
+                    </span>
+                  </span>
+                  <span class="mt-1 block text-sm opacity-75">Tulis format sendiri. Instruksi ini akan diprioritaskan atas template step 3.</span>
+                </button>
               </div>
             </div>
+
+            <section v-if="!formatForm.advancedEnabled" class="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+              <div>
+                <h4 class="font-semibold text-gray-800 dark:text-white/90">Aturan Aktif: Template</h4>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">AI akan memakai pilihan template di bawah ini. Instruksi custom tidak dipakai selama mode ini aktif.</p>
+              </div>
+
+              <div class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div>
+                  <label class="form-label">Panjang Jawaban</label>
+                  <select v-model="formatForm.length" class="form-input">
+                    <option value="short">Singkat dan langsung</option>
+                    <option value="medium">Sedang dengan poin penting</option>
+                    <option value="complete">Lengkap tapi tetap rapi</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">Gaya Bahasa</label>
+                  <select v-model="formatForm.tone" class="form-input">
+                    <option value="friendly">Ramah seperti admin WA</option>
+                    <option value="professional">Profesional dan rapi</option>
+                    <option value="casual">Santai dan dekat</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">Struktur Jawaban</label>
+                  <select v-model="formatForm.structure" class="form-input">
+                    <option value="opening_details_cta">Pembuka, isi, ajakan lanjut</option>
+                    <option value="direct_bullets_cta">Langsung ke poin, lalu ajakan lanjut</option>
+                    <option value="summary_steps_cta">Ringkasan, langkah, ajakan lanjut</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">CTA Penutup</label>
+                  <select v-model="formatForm.ctaStyle" class="form-input">
+                    <option value="ask_need">Tanya kebutuhan pelanggan</option>
+                    <option value="invite_booking">Ajak booking/daftar</option>
+                    <option value="offer_admin">Tawarkan bantuan admin</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section v-else class="mt-5 rounded-2xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/10">
+              <div>
+                <h4 class="font-semibold text-gray-800 dark:text-white/90">Aturan Aktif: Custom Override</h4>
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  AI akan memakai instruksi custom ini sebagai prioritas. Pilihan template tetap tersimpan, tetapi tidak dipakai selama mode ini aktif.
+                </p>
+              </div>
+
+              <div class="mt-4">
+                <label class="form-label">Instruksi Format Custom</label>
+                <textarea
+                  v-model="formatForm.customInstruction"
+                  class="form-textarea min-h-[170px]"
+                  placeholder="Contoh: Jawab dengan urutan: sapaan singkat, jawaban utama dari knowledge, rekomendasi singkat jika relevan, lalu tanya apakah pelanggan ingin dibantu booking. Jangan pakai emoji dan jangan terlalu panjang."
+                />
+              </div>
+            </section>
 
             <section class="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -343,26 +375,10 @@
               </div>
             </section>
 
-            <section class="mt-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]">
-              <label class="inline-flex items-start gap-3 text-sm font-medium text-gray-700 dark:text-gray-200">
-                <input v-model="formatForm.advancedEnabled" type="checkbox" class="mt-1 size-4 rounded border-gray-300" />
-                <span>
-                  <span class="block">Saya ingin menulis instruksi format sendiri</span>
-                  <span class="mt-1 block text-sm font-normal text-gray-500 dark:text-gray-400">
-                    Gunakan hanya kalau format preset belum cukup. Instruksi wajib keamanan dan knowledge tetap dipakai oleh sistem.
-                  </span>
-                </span>
-              </label>
-
-              <div v-if="formatForm.advancedEnabled" class="mt-4">
-                <label class="form-label">Instruksi Format Khusus</label>
-                <textarea
-                  v-model="formatForm.customInstruction"
-                  class="form-textarea min-h-[150px]"
-                  placeholder="Contoh: Jawab dengan urutan: sapaan singkat, jawaban utama, rekomendasi paket, lalu pertanyaan penutup."
-                />
-              </div>
-            </section>
+            <p class="mt-4 rounded-2xl border border-gray-200 bg-white p-4 text-sm leading-6 text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400">
+              Mode aktif: <span class="font-semibold text-gray-700 dark:text-gray-200">{{ formatForm.advancedEnabled ? 'Custom Override' : 'Pakai Template' }}</span>.
+              Simpan step ini agar format tersebut dipakai oleh AI live.
+            </p>
           </section>
 
           <section class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]">
@@ -564,6 +580,16 @@ type AssistantFlowDraft = {
     topK: number
     maxChunks: number
     chunkTargetTokens: number
+    trainingFormat?: {
+      length?: 'short' | 'medium' | 'complete'
+      tone?: 'friendly' | 'professional' | 'casual'
+      structure?: 'opening_details_cta' | 'direct_bullets_cta' | 'summary_steps_cta'
+      ctaStyle?: 'ask_need' | 'invite_booking' | 'offer_admin'
+      answerPrefix?: string
+      customRules?: string[]
+      advancedEnabled?: boolean
+      customInstruction?: string
+    }
   }
 }
 
@@ -641,7 +667,6 @@ const previewDetectedIntents = ref<string[]>([])
 const previewReindexResults = ref<Array<{ id?: number; status?: string; chunks?: number }>>([])
 const simulationMessages = ref<SimulationMessage[]>([])
 const simulationScrollEl = ref<HTMLElement | null>(null)
-const optionalKnowledgeOpen = ref(false)
 const removedCustomKnowledgeIds = ref<number[]>([])
 const targetTenantId = computed(() => {
   const raw = Number(route.query.tenantId || 0)
@@ -703,7 +728,7 @@ type KnowledgeSection = {
   help: string
   content: string
   placeholder: string
-  group: 'primary' | 'optional'
+  group: 'primary'
 }
 
 type CustomKnowledgeSection = {
@@ -738,44 +763,11 @@ const knowledgeSections = reactive([
     placeholder: 'Contoh:\n1. Pilih paket.\n2. Kirim nama, nomor WA, dan jadwal pilihan.\n3. Admin konfirmasi ketersediaan.\n4. Lakukan pembayaran DP jika diperlukan.',
     group: 'primary',
   },
-  {
-    key: 'hours',
-    title: 'Jam Layanan',
-    help: 'Jam operasional, jadwal admin, atau jadwal layanan.',
-    content: '',
-    placeholder: 'Contoh:\nAdmin melayani chat setiap Senin-Sabtu pukul 08.00-20.00.\nSesi latihan tersedia pagi, siang, dan sore sesuai jadwal.',
-    group: 'optional',
-  },
-  {
-    key: 'location',
-    title: 'Lokasi dan Area Layanan',
-    help: 'Alamat, cabang, area layanan, atau titik temu.',
-    content: '',
-    placeholder: 'Contoh:\nAlamat kantor: ...\nArea layanan: Jakarta Selatan, Depok, dan sekitarnya.\nTitik temu bisa disesuaikan berdasarkan jadwal.',
-    group: 'optional',
-  },
-  {
-    key: 'payment',
-    title: 'Pembayaran',
-    help: 'Metode bayar, DP, pelunasan, dan instruksi bukti transfer.',
-    content: '',
-    placeholder: 'Contoh:\nPembayaran bisa melalui transfer bank atau QRIS.\nDP minimal Rp...\nSetelah transfer, pelanggan mengirim bukti pembayaran ke chat ini.',
-    group: 'optional',
-  },
-  {
-    key: 'policy',
-    title: 'Kebijakan Penting',
-    help: 'Syarat, reschedule, refund, garansi, atau batasan klaim.',
-    content: '',
-    placeholder: 'Contoh:\nReschedule maksimal H-1 sesuai ketersediaan jadwal.\nBiaya yang sudah dibayarkan tidak dapat dikembalikan kecuali ada pembatalan dari pihak kami.',
-    group: 'optional',
-  },
 ]) as KnowledgeSection[]
 
 const customKnowledgeSections = reactive<CustomKnowledgeSection[]>([])
 
 const primaryKnowledgeSections = computed(() => knowledgeSections.filter((section) => section.group === 'primary'))
-const optionalKnowledgeSections = computed(() => knowledgeSections.filter((section) => section.group === 'optional'))
 
 const activeFormatNotes = computed(() => {
   const notes = formatForm.customRules.map((rule) => rule.text.trim()).filter(Boolean)
@@ -962,7 +954,7 @@ function addLeadQuestionKnowledge() {
 
   const alreadyAdded = customKnowledgeSections.some((section) => section.content.includes(leadQuestion.value))
   if (alreadyAdded) {
-    setFlash('info', 'Pertanyaan lead ini sudah ada di pengetahuan tambahan.')
+    setFlash('info', 'Pertanyaan lead ini sudah ada di topik sendiri.')
     return
   }
 
@@ -971,7 +963,7 @@ function addLeadQuestionKnowledge() {
     title: 'Jawaban dari Lead Fallback',
     content: `Pertanyaan pelanggan:\n${leadQuestion.value}\n\nJawaban yang sebaiknya AI berikan:\n`,
   })
-  setFlash('success', 'Pertanyaan lead ditambahkan ke pengetahuan tambahan.')
+  setFlash('success', 'Pertanyaan lead ditambahkan ke topik sendiri.')
 }
 
 function applyRouteStep() {
@@ -1067,6 +1059,16 @@ function buildUpdatedFlow() {
   flow.profile.fallbackMessage = profileForm.fallbackMessage.trim()
   flow.profile.thanksMessage = flow.profile.thanksMessage || 'Sama-sama kak. Kalau masih ada yang ingin ditanyakan, saya siap bantu lagi ya.'
   flow.advanced.systemPrompt = buildSystemPrompt()
+  flow.advanced.trainingFormat = {
+    length: formatForm.length,
+    tone: formatForm.tone,
+    structure: formatForm.structure,
+    ctaStyle: formatForm.ctaStyle,
+    answerPrefix: formatForm.answerPrefix.trim(),
+    customRules: formatForm.customRules.map((rule) => rule.text.trim()).filter(Boolean),
+    advancedEnabled: formatForm.advancedEnabled,
+    customInstruction: formatForm.customInstruction.trim(),
+  }
 
   const answerAction = flow.actions.find((action) => action.type === 'answer_from_knowledge')
   if (answerAction) {
@@ -1331,6 +1333,39 @@ onMounted(() => {
   border-radius: 9999px;
   font-size: 0.875rem;
   font-weight: 700;
+}
+
+.format-mode-card {
+  min-height: 6.75rem;
+  border-width: 1px;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  text-align: left;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.format-mode-badge {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 0.1875rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1rem;
+}
+
+.format-mode-badge-active {
+  background: rgb(70 95 255);
+  color: white;
+}
+
+.format-mode-badge-idle {
+  background: rgb(243 244 246);
+  color: rgb(107 114 128);
+}
+
+.dark .format-mode-badge-idle {
+  background: rgb(31 41 55);
+  color: rgb(156 163 175);
 }
 
 .form-label {

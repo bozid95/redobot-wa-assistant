@@ -83,6 +83,16 @@ export type AssistantFlowDraft = {
     topK: number
     maxChunks: number
     chunkTargetTokens: number
+    trainingFormat?: {
+      length?: 'short' | 'medium' | 'complete'
+      tone?: 'friendly' | 'professional' | 'casual'
+      structure?: 'opening_details_cta' | 'direct_bullets_cta' | 'summary_steps_cta'
+      ctaStyle?: 'ask_need' | 'invite_booking' | 'offer_admin'
+      answerPrefix?: string
+      customRules?: string[]
+      advancedEnabled?: boolean
+      customInstruction?: string
+    }
   }
 }
 

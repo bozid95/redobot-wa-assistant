@@ -304,6 +304,30 @@ export class RagConfigService {
             1500,
           ),
         ),
+        trainingFormat: this.asRecord(advanced.trainingFormat)
+          ? {
+              length: this.sanitizeString(this.asRecord(advanced.trainingFormat)?.length) as
+                | 'short'
+                | 'medium'
+                | 'complete',
+              tone: this.sanitizeString(this.asRecord(advanced.trainingFormat)?.tone) as
+                | 'friendly'
+                | 'professional'
+                | 'casual',
+              structure: this.sanitizeString(this.asRecord(advanced.trainingFormat)?.structure) as
+                | 'opening_details_cta'
+                | 'direct_bullets_cta'
+                | 'summary_steps_cta',
+              ctaStyle: this.sanitizeString(this.asRecord(advanced.trainingFormat)?.ctaStyle) as
+                | 'ask_need'
+                | 'invite_booking'
+                | 'offer_admin',
+              answerPrefix: this.sanitizeString(this.asRecord(advanced.trainingFormat)?.answerPrefix),
+              customRules: this.sanitizeStringArray(this.asRecord(advanced.trainingFormat)?.customRules),
+              advancedEnabled: Boolean(this.asRecord(advanced.trainingFormat)?.advancedEnabled),
+              customInstruction: this.sanitizeString(this.asRecord(advanced.trainingFormat)?.customInstruction),
+            }
+          : defaults.advanced.trainingFormat,
       },
     }
   }

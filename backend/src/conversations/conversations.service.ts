@@ -102,6 +102,7 @@ export class ConversationsService {
     });
 
     const payload = await this.whatsappService.sendText(this.getTenantId(user), conversation.phone, reply);
+    const messageId = this.whatsappService.extractMessageId(payload);
 
     await this.prisma.conversationMessage.create({
       data: {
@@ -111,6 +112,7 @@ export class ConversationsService {
         role: 'admin',
         source: 'manual_reply',
         message: reply,
+        messageId: messageId || undefined,
         metadata: payload,
       },
     });

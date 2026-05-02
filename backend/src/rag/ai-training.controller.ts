@@ -25,6 +25,9 @@ type TrainingFormat = {
   structure?: 'opening_details_cta' | 'direct_bullets_cta' | 'summary_steps_cta';
   ctaStyle?: 'ask_need' | 'invite_booking' | 'offer_admin';
   answerPrefix?: string;
+  customRules?: string[];
+  advancedEnabled?: boolean;
+  customInstruction?: string;
 };
 
 type TrainingProfile = {
@@ -41,7 +44,7 @@ type TrainingKnowledgeSection = {
   id?: number;
   title?: string;
   content?: string;
-  group?: 'primary' | 'optional' | 'custom';
+  group?: 'primary' | 'custom';
 };
 
 type AiTrainingSaveInput = {
@@ -57,7 +60,7 @@ const defaultKnowledgeSections: Array<{
   title: string;
   help: string;
   placeholder: string;
-  group: 'primary' | 'optional';
+  group: 'primary';
 }> = [
   {
     key: 'faq',
@@ -82,38 +85,6 @@ const defaultKnowledgeSections: Array<{
     placeholder:
       'Contoh:\n1. Pilih paket.\n2. Kirim nama, nomor WA, dan jadwal pilihan.\n3. Admin konfirmasi ketersediaan.\n4. Lakukan pembayaran DP jika diperlukan.',
     group: 'primary',
-  },
-  {
-    key: 'hours',
-    title: 'Jam Layanan',
-    help: 'Jam operasional, jadwal admin, atau jadwal layanan.',
-    placeholder:
-      'Contoh:\nAdmin melayani chat setiap Senin-Sabtu pukul 08.00-20.00.\nSesi latihan tersedia pagi, siang, dan sore sesuai jadwal.',
-    group: 'optional',
-  },
-  {
-    key: 'location',
-    title: 'Lokasi dan Area Layanan',
-    help: 'Alamat, cabang, area layanan, atau titik temu.',
-    placeholder:
-      'Contoh:\nAlamat kantor: ...\nArea layanan: Jakarta Selatan, Depok, dan sekitarnya.\nTitik temu bisa disesuaikan berdasarkan jadwal.',
-    group: 'optional',
-  },
-  {
-    key: 'payment',
-    title: 'Pembayaran',
-    help: 'Metode bayar, DP, pelunasan, dan instruksi bukti transfer.',
-    placeholder:
-      'Contoh:\nPembayaran bisa melalui transfer bank atau QRIS.\nDP minimal Rp...\nSetelah transfer, pelanggan mengirim bukti pembayaran ke chat ini.',
-    group: 'optional',
-  },
-  {
-    key: 'policy',
-    title: 'Kebijakan Penting',
-    help: 'Syarat, reschedule, refund, garansi, atau batasan klaim.',
-    placeholder:
-      'Contoh:\nReschedule maksimal H-1 sesuai ketersediaan jadwal.\nBiaya yang sudah dibayarkan tidak dapat dikembalikan kecuali ada pembatalan dari pihak kami.',
-    group: 'optional',
   },
 ];
 
@@ -222,6 +193,11 @@ export class AiTrainingController {
         : 'ask_need',
       answerPrefix:
         this.sanitizeString(format?.answerPrefix) || 'Saya bantu cek informasinya ya kak.',
+      customRules: Array.isArray(format?.customRules)
+        ? format.customRules.map((rule) => this.sanitizeString(rule)).filter(Boolean)
+        : [],
+      advancedEnabled: Boolean(format?.advancedEnabled),
+      customInstruction: this.sanitizeString(format?.customInstruction),
     };
   }
 
@@ -253,12 +229,23 @@ export class AiTrainingController {
       offer_admin: 'Tutup dengan menawarkan bantuan admin bila pelanggan perlu dibantu langsung.',
     }[normalized.ctaStyle];
 
+    const customRules = normalized.customRules.map((rule) => `Aturan tambahan: ${rule}`);
+    const customOverride =
+      normalized.advancedEnabled && normalized.customInstruction
+        ? [
+            'User mengaktifkan custom override format step 3.',
+            `Ikuti instruksi format custom ini sebagai prioritas atas preset format: ${normalized.customInstruction}`,
+          ]
+        : [];
+
     return [
       'Anda adalah admin chat WhatsApp yang membantu pelanggan berdasarkan knowledge aktif.',
       toneInstruction,
       lengthInstruction,
       structureInstruction,
       ctaInstruction,
+      ...customRules,
+      ...customOverride,
       'Jangan mengarang harga, jadwal, kebijakan, atau fakta yang tidak ada di knowledge.',
     ].join(' ');
   }
@@ -282,6 +269,7 @@ export class AiTrainingController {
     nextFlow.profile.menuEnabled = false;
     nextFlow.profile.menuItems = [];
     nextFlow.advanced.systemPrompt = this.buildSystemPrompt(format);
+    nextFlow.advanced.trainingFormat = this.normalizeFormat(format);
 
     const answerAction = nextFlow.actions.find((action) => action.type === 'answer_from_knowledge');
     if (answerAction) {
@@ -359,6 +347,13 @@ export class AiTrainingController {
       request.user?.tenantName || '',
     );
     const answerAction = config.assistantFlow.actions.find((action) => action.type === 'answer_from_knowledge');
+    const savedFormat = this.normalizeFormat({
+      ...(config.assistantFlow.advanced.trainingFormat || {}),
+      answerPrefix:
+        config.assistantFlow.advanced.trainingFormat?.answerPrefix ||
+        answerAction?.messageTemplate ||
+        'Saya bantu cek informasinya ya kak.',
+    });
 
     return {
       profile: {
@@ -372,13 +367,7 @@ export class AiTrainingController {
         fallbackMessage:
           config.assistantFlow.profile.fallbackMessage || config.config.fallbackMessage,
       },
-      format: {
-        length: 'medium',
-        tone: 'friendly',
-        structure: 'opening_details_cta',
-        ctaStyle: 'ask_need',
-        answerPrefix: answerAction?.messageTemplate || 'Saya bantu cek informasinya ya kak.',
-      },
+      format: savedFormat,
       knowledgeSections: defaultKnowledgeSections.map((section) => {
         const article = articleByTitle.get(this.normalizeTitle(section.title));
         return {
